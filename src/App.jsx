@@ -34,7 +34,14 @@ function yesterdayKey() {
 }
 
 export default function App() {
-  const { user, loading: authLoading, error: authError, login, logout } = useAuth();
+  const {
+    user,
+    loading: authLoading,
+    error: authError,
+    login,
+    loginAsGuest,
+    logout,
+  } = useAuth();
 
   // Today's log
   const today = dateKey();
@@ -121,7 +128,7 @@ export default function App() {
     return (
       <BrowserRouter>
         <Suspense fallback={null}>
-          <Login onLogin={login} error={authError} />
+          <Login onLogin={login} onGuestLogin={loginAsGuest} error={authError} />
         </Suspense>
       </BrowserRouter>
     );

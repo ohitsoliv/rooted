@@ -148,7 +148,6 @@ export default function useLog(userId, date) {
         return false;
       }
     },
-    [userId, today, log]
     [userId, today]
   );
 

@@ -9,6 +9,54 @@ import {
   onAuthStateChanged,
 } from "../firebase";
 
+const GUEST_PROFILE_KEY = "rooted_guest_profile";
+
+function readGuestProfile() {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(GUEST_PROFILE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || !parsed.uid) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeGuestProfile(profile) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(GUEST_PROFILE_KEY, JSON.stringify(profile));
+  } catch {
+    return;
+  }
+}
+
+function clearGuestProfile() {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(GUEST_PROFILE_KEY);
+  } catch {
+    return;
+  }
+}
+
+function createGuestUser() {
+  const existing = readGuestProfile();
+  if (existing) return existing;
+
+  const randomSuffix = Math.random().toString(36).slice(2, 8);
+  const guest = {
+    uid: `guest_local_${randomSuffix}`,
+    displayName: "Guest",
+    email: null,
+    isGuest: true,
+  };
+  writeGuestProfile(guest);
+  return guest;
+}
+
 /**
  * useAuth — returns { user, loading, error, login, logout }
  *
@@ -26,7 +74,12 @@ export default function useAuth() {
   // Listen to auth state changes (fires once on load, then on login/logout)
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      setUser(firebaseUser);
+      if (firebaseUser) {
+        clearGuestProfile();
+        setUser(firebaseUser);
+      } else {
+        setUser(readGuestProfile());
+      }
       setLoading(false);
     });
     return unsubscribe;
@@ -47,11 +100,23 @@ export default function useAuth() {
   const logout = useCallback(async () => {
     setError(null);
     try {
+      if (user?.isGuest) {
+        clearGuestProfile();
+        setUser(null);
+        return;
+      }
       await logOut();
     } catch (err) {
       setError(err.message);
     }
+  }, [user]);
+
+  const loginAsGuest = useCallback(() => {
+    setError(null);
+    const guest = createGuestUser();
+    setUser(guest);
+    setLoading(false);
   }, []);
 
-  return { user, loading, error, login, logout };
+  return { user, loading, error, login, loginAsGuest, logout };
 }

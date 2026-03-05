@@ -6,9 +6,10 @@
  *
  * Props:
  *   onLogin — () => void (triggers Google sign-in)
+ *   onGuestLogin — () => void (enters local-only guest mode)
  *   error   — error message string or null
  */
-export default function Login({ onLogin, error }) {
+export default function Login({ onLogin, onGuestLogin, error }) {
   return (
     <div style={{
       minHeight: "100vh",
@@ -124,6 +125,50 @@ export default function Login({ onLogin, error }) {
         </svg>
         Sign in with Google
       </button>
+
+      <button
+        onClick={onGuestLogin}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: "8px",
+          padding: "12px 22px",
+          background: "transparent",
+          border: "1.5px dashed var(--tan, #D4C5A9)",
+          borderRadius: "14px",
+          cursor: "pointer",
+          transition: "all 0.2s ease",
+          WebkitTapHighlightColor: "transparent",
+          fontFamily: "'Nunito', sans-serif",
+          fontSize: "14px",
+          fontWeight: 700,
+          color: "var(--brown-light, #9A7E7E)",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.borderColor = "var(--sage, #7D9B76)";
+          e.currentTarget.style.color = "var(--sage-dark, #5A7554)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.borderColor = "var(--tan, #D4C5A9)";
+          e.currentTarget.style.color = "var(--brown-light, #9A7E7E)";
+        }}
+      >
+        <span aria-hidden="true" style={{ fontSize: "16px" }}>👀</span>
+        Continue as Guest (local only)
+      </button>
+
+      <p style={{
+        fontFamily: "'Nunito', sans-serif",
+        fontSize: "12px",
+        color: "var(--brown-light, #9A7E7E)",
+        margin: "-12px 0 0",
+        maxWidth: "300px",
+        textAlign: "center",
+        lineHeight: 1.45,
+      }}>
+        Guest data stays on this browser and will not sync across devices.
+      </p>
 
       {/* Error message */}
       {error && (

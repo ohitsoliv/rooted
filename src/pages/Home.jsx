@@ -440,7 +440,7 @@ export default function Home({
               WebkitTapHighlightColor: "transparent",
             }}
           >
-            Sign out ({user.email})
+            Sign out ({user.isGuest ? "Guest" : user.email})
           </button>
         )}
       </main>

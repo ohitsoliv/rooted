@@ -60,6 +60,7 @@ const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: "select_account" });
 
 const localCacheKey = (userId) => `rooted_logs_${userId}`;
+const isLocalOnlyUser = (userId) => String(userId || "").startsWith("guest_local_");
 
 function readLocalLogs(userId) {
   if (typeof window === "undefined" || !userId) return {};
@@ -97,6 +98,12 @@ export const dateKey = (date = new Date()) => {
 
 export async function fetchLog(userId, dayKey) {
   if (!userId || !dayKey) return {};
+
+  if (isLocalOnlyUser(userId)) {
+    const localOnly = readLocalLogs(userId);
+    return localOnly[dayKey] || {};
+  }
+
   try {
     const ref = doc(db, "users", userId, "logs", dayKey);
     const snap = await getDoc(ref);
@@ -128,6 +135,10 @@ export async function saveLog(userId, dayKey, payload) {
   };
   writeLocalLogs(userId, local);
 
+  if (isLocalOnlyUser(userId)) {
+    return;
+  }
+
   try {
     const ref = doc(db, "users", userId, "logs", dayKey);
     await setDoc(ref, payload, { merge: true });
@@ -140,6 +151,17 @@ export async function fetchLogRange(userId, startDate, endDate) {
   if (!userId || !startDate || !endDate) return [];
 
   const logs = [];
+
+  if (isLocalOnlyUser(userId)) {
+    const localOnly = readLocalLogs(userId);
+    Object.entries(localOnly).forEach(([date, data]) => {
+      if (date >= startDate && date <= endDate) {
+        logs.push({ date, ...(data || {}) });
+      }
+    });
+    logs.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    return logs;
+  }
 
   try {
     const logsRef = collection(db, "users", userId, "logs");
