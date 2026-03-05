@@ -1,0 +1,158 @@
+// src/hooks/useLog.js — Rooted Health Tracker
+// Custom hook: read & write a single day's log (users/{uid}/logs/{YYYY-MM-DD})
+
+import { useState, useEffect, useCallback, useRef } from "react";
+import { fetchLog, saveLog, dateKey } from "../firebase";
+
+/**
+ * useLog(userId, date?)
+ *
+ * Returns:
+ *   log          — the full day-log object (or empty {} while loading)
+ *   loading      — true while fetching from Firestore
+ *   saving       — true during a save operation
+ *   error        — any Firestore error message
+ *   updateField  — (section, field, value) => merges into local state instantly
+ *   updateSection— (section, data) => merges an entire section object
+ *   saveSection  — (sectionName) => persists current local state to Firestore
+ *                   and adds sectionName to completedSections
+ *   resetSection — (sectionName) => clears a section locally
+ *   completedSections — array of section names that have been saved
+ */
+export default function useLog(userId, date) {
+  const today = date || dateKey();
+  const requestKey = userId ? `${userId}_${today}` : "";
+  const [log, setLog] = useState({});
+  const [resolvedKey, setResolvedKey] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  // Track which version of userId+date we're on to avoid stale writes
+  const keyRef = useRef("");
+
+  // Fetch log on mount or when userId/date changes
+  useEffect(() => {
+    if (!requestKey) {
+      keyRef.current = "";
+      return;
+    }
+
+    const key = requestKey;
+    keyRef.current = key;
+
+    fetchLog(userId, today)
+      .then((data) => {
+        // Only update if we're still looking at the same user+date
+        if (keyRef.current === key) {
+          setLog(data || {});
+          setError(null);
+          setResolvedKey(key);
+        }
+      })
+      .catch((err) => {
+        if (keyRef.current === key) {
+          setError(err.message);
+          setResolvedKey(key);
+        }
+      });
+  }, [requestKey, today, userId]);
+
+  // --- Local state helpers (instant, no network) ---
+
+  /** Update a single field inside a section: log[section][field] = value */
+  const updateField = useCallback((section, field, value) => {
+    setLog((prev) => ({
+      ...prev,
+      [section]: {
+        ...(prev[section] || {}),
+        [field]: value,
+      },
+    }));
+  }, []);
+
+  /** Merge an object into a section: log[section] = { ...old, ...data } */
+  const updateSection = useCallback((section, data) => {
+    setLog((prev) => ({
+      ...prev,
+      [section]: {
+        ...(prev[section] || {}),
+        ...data,
+      },
+    }));
+  }, []);
+
+  /** Clear a section back to empty */
+  const resetSection = useCallback((section) => {
+    setLog((prev) => {
+      const next = { ...prev };
+      delete next[section];
+      // Also remove from completedSections
+      if (next.completedSections) {
+        next.completedSections = next.completedSections.filter(
+          (s) => s !== section
+        );
+      }
+      return next;
+    });
+  }, []);
+
+  // --- Persist to Firestore ---
+
+  /**
+   * Save the current local log state to Firestore.
+   * Adds `sectionName` to the completedSections array.
+   * Returns true on success, false on error.
+   */
+  const saveSection = useCallback(
+    async (sectionName) => {
+      if (!userId) return false;
+      setSaving(true);
+      setError(null);
+
+      try {
+        // Build completedSections list
+        const completed = log.completedSections || [];
+        const updatedCompleted = completed.includes(sectionName)
+          ? completed
+          : [...completed, sectionName];
+
+        // Persist the entire section + updated completedSections
+        const payload = {
+          [sectionName]: log[sectionName] || {},
+          completedSections: updatedCompleted,
+        };
+
+        await saveLog(userId, today, payload);
+
+        // Update local state with new completedSections
+        setLog((prev) => ({
+          ...prev,
+          completedSections: updatedCompleted,
+        }));
+
+        setSaving(false);
+        return true;
+      } catch (err) {
+        setError(err.message);
+        setSaving(false);
+        return false;
+      }
+    },
+    [userId, today, log]
+  );
+
+  const loading = Boolean(requestKey) && resolvedKey !== requestKey;
+  const completedSections = log.completedSections || [];
+
+  return {
+    log,
+    loading,
+    saving,
+    error,
+    updateField,
+    updateSection,
+    saveSection,
+    resetSection,
+    completedSections,
+  };
+}

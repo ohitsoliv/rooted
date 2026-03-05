@@ -1,0 +1,249 @@
+/* src/index.css — Rooted Health Tracker
+   Global styles, CSS variables, resets, base typography */
+
+/* ============================================
+   CSS VARIABLES — Design System
+   ============================================ */
+
+:root {
+  /* Backgrounds */
+  --cream: #FAF5EB;
+  --white: #FFFDF8;
+
+  /* Primary */
+  --terra: #C1724F;
+  --terra-dark: #9E5A38;
+
+  /* Success / positive */
+  --sage: #7D9B76;
+  --sage-dark: #5A7554;
+
+  /* Mood / secondary */
+  --mauve: #A07B8A;
+  --mauve-dark: #7A5568;
+
+  /* Nutrition / general */
+  --gold: #C4A96A;
+  --gold-dark: #A68D4F;
+
+  /* POTS tracker */
+  --teal: #5A9099;
+  --teal-dark: #477A82;
+
+  /* EDS tracker */
+  --amber: #C49A45;
+  --amber-dark: #A57F30;
+
+  /* Text */
+  --brown: #3B2F2F;
+  --brown-light: #9A7E7E;
+
+  /* Borders */
+  --tan: #D4C5A9;
+  --tan-light: #EDE3CF;
+
+  /* Radius */
+  --radius-sm: 14px;
+  --radius-md: 20px;
+  --radius-lg: 28px;
+}
+
+/* ============================================
+   RESET & BASE
+   ============================================ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 500;
+  color: var(--brown);
+  background: var(--cream);
+  line-height: 1.5;
+  min-height: 100vh;
+  overflow-x: hidden;
+  padding-bottom: 80px; /* room for bottom nav */
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* ============================================
+   TYPOGRAPHY
+   ============================================ */
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Fraunces', Georgia, serif;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--brown);
+}
+
+p {
+  line-height: 1.6;
+}
+
+a {
+  color: var(--terra);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* ============================================
+   FORM ELEMENTS
+   ============================================ */
+
+input, textarea, select {
+  font-family: 'Nunito', sans-serif;
+  font-size: 14px;
+  color: var(--brown);
+}
+
+input:focus, textarea:focus, select:focus {
+  outline: none;
+}
+
+button {
+  font-family: 'Nunito', sans-serif;
+  border: none;
+  background: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible {
+  outline: 2px solid var(--terra);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/* ============================================
+   SCROLLBAR STYLING
+   ============================================ */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--tan);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--brown-light);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--tan) transparent;
+}
+
+/* ============================================
+   LOADING SCREEN
+   ============================================ */
+
+.loading-screen {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: var(--cream);
+}
+
+.loading-emoji {
+  font-size: 56px;
+  animation: loading-pulse 1.5s ease-in-out infinite;
+}
+
+.loading-text {
+  font-family: 'Fraunces', serif;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--terra);
+  animation: loading-fade 1.5s ease-in-out infinite;
+}
+
+@keyframes loading-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+}
+
+@keyframes loading-fade {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* ============================================
+   SELECTION
+   ============================================ */
+
+::selection {
+  background: color-mix(in srgb, var(--terra) 20%, transparent);
+  color: var(--brown);
+}
+
+/* ============================================
+   ACCESSIBILITY
+   ============================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+
+/* Cap max width on larger screens for mobile-first feel */
+@media (min-width: 480px) {
+  body {
+    display: flex;
+    justify-content: center;
+  }
+
+  #root {
+    max-width: 430px;
+    width: 100%;
+    min-height: 100vh;
+    position: relative;
+    box-shadow: 0 0 40px rgba(59, 47, 47, 0.06);
+  }
+
+  .bottom-nav {
+    max-width: 430px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+}
