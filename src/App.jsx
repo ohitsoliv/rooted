@@ -6,15 +6,15 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import useAuth from "./hooks/useAuth";
 import useLog from "./hooks/useLog";
 import useLogs from "./hooks/useLogs";
-import { dateKey } from "./firebase";
+import { dateKey, saveLog } from "./firebase";
 import Home from "./pages/Home";
 import Log from "./pages/Log";
 import Summary from "./pages/Summary";
+import History from "./pages/History";
+import Export from "./pages/Export";
 import Login from "./pages/Login";
 
-/**
- * Get the first and last day of the current month as YYYY-MM-DD strings.
- */
+/** Get the first and last day of the current month as YYYY-MM-DD strings. */
 function getMonthRange() {
   const now = new Date();
   const y = now.getFullYear();
@@ -25,9 +25,7 @@ function getMonthRange() {
   return { first, last };
 }
 
-/**
- * Get yesterday's date key.
- */
+/** Get yesterday's date key. */
 function yesterdayKey() {
   const d = new Date();
   d.setDate(d.getDate() - 1);
@@ -47,15 +45,14 @@ export default function App() {
   } = useLog(user?.uid, today);
 
   // Yesterday's log (for "same as yesterday" feature)
-  const {
-    log: yesterdayLog,
-  } = useLog(user?.uid, yesterdayKey());
+  const { log: yesterdayLog } = useLog(user?.uid, yesterdayKey());
 
-  // Month logs (for Summary page)
+  // Month logs (for Summary, History, Export pages)
   const { first, last } = useMemo(() => getMonthRange(), []);
   const {
     logs: monthLogs,
     loading: monthLoading,
+    refetch: refetchMonthLogs,
   } = useLogs(user?.uid, first, last);
 
   // Good Enough Mode — persisted in localStorage
@@ -86,6 +83,19 @@ export default function App() {
       })
       .filter(Boolean);
   }, [monthLogs]);
+
+  // Backup restore handler
+  const userId = user?.uid;
+
+  const handleRestore = useCallback(async (logsArray) => {
+    if (!userId) return;
+    for (const logEntry of logsArray) {
+      if (logEntry.date) {
+        await saveLog(userId, logEntry.date, logEntry);
+      }
+    }
+    refetchMonthLogs();
+  }, [userId, refetchMonthLogs]);
 
   // --- Auth loading screen ---
   if (authLoading) {
@@ -149,7 +159,7 @@ export default function App() {
         <Route
           path="/history"
           element={
-            <Summary
+            <History
               logs={monthLogs}
               loading={monthLoading}
             />
@@ -158,9 +168,10 @@ export default function App() {
         <Route
           path="/export"
           element={
-            <Summary
+            <Export
               logs={monthLogs}
               loading={monthLoading}
+              onRestore={handleRestore}
             />
           }
         />
