@@ -242,8 +242,10 @@ button:focus-visible {
   }
 
   .bottom-nav {
+    width: 100%;
     max-width: 430px;
     left: 50%;
+    right: auto;
     transform: translateX(-50%);
   }
 }

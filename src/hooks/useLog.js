@@ -29,6 +29,7 @@ export default function useLog(userId, date) {
 
   // Track which version of userId+date we're on to avoid stale writes
   const keyRef = useRef("");
+  const logRef = useRef({});
 
   // Fetch log on mount or when userId/date changes
   useEffect(() => {
@@ -44,7 +45,9 @@ export default function useLog(userId, date) {
       .then((data) => {
         // Only update if we're still looking at the same user+date
         if (keyRef.current === key) {
-          setLog(data || {});
+          const next = data || {};
+          logRef.current = next;
+          setLog(next);
           setError(null);
           setResolvedKey(key);
         }
@@ -61,39 +64,43 @@ export default function useLog(userId, date) {
 
   /** Update a single field inside a section: log[section][field] = value */
   const updateField = useCallback((section, field, value) => {
-    setLog((prev) => ({
-      ...prev,
+    const current = logRef.current;
+    const next = {
+      ...current,
       [section]: {
-        ...(prev[section] || {}),
+        ...(current[section] || {}),
         [field]: value,
       },
-    }));
+    };
+    logRef.current = next;
+    setLog(next);
   }, []);
 
   /** Merge an object into a section: log[section] = { ...old, ...data } */
   const updateSection = useCallback((section, data) => {
-    setLog((prev) => ({
-      ...prev,
+    const current = logRef.current;
+    const next = {
+      ...current,
       [section]: {
-        ...(prev[section] || {}),
+        ...(current[section] || {}),
         ...data,
       },
-    }));
+    };
+    logRef.current = next;
+    setLog(next);
   }, []);
 
   /** Clear a section back to empty */
   const resetSection = useCallback((section) => {
-    setLog((prev) => {
-      const next = { ...prev };
-      delete next[section];
-      // Also remove from completedSections
-      if (next.completedSections) {
-        next.completedSections = next.completedSections.filter(
-          (s) => s !== section
-        );
-      }
-      return next;
-    });
+    const next = { ...logRef.current };
+    delete next[section];
+    if (next.completedSections) {
+      next.completedSections = next.completedSections.filter(
+        (s) => s !== section
+      );
+    }
+    logRef.current = next;
+    setLog(next);
   }, []);
 
   // --- Persist to Firestore ---
@@ -111,24 +118,27 @@ export default function useLog(userId, date) {
 
       try {
         // Build completedSections list
-        const completed = log.completedSections || [];
+        const current = logRef.current;
+        const completed = current.completedSections || [];
         const updatedCompleted = completed.includes(sectionName)
           ? completed
           : [...completed, sectionName];
 
         // Persist the entire section + updated completedSections
         const payload = {
-          [sectionName]: log[sectionName] || {},
+          [sectionName]: current[sectionName] || {},
           completedSections: updatedCompleted,
         };
 
         await saveLog(userId, today, payload);
 
         // Update local state with new completedSections
-        setLog((prev) => ({
-          ...prev,
+        const next = {
+          ...current,
           completedSections: updatedCompleted,
-        }));
+        };
+        logRef.current = next;
+        setLog(next);
 
         setSaving(false);
         return true;
@@ -139,6 +149,7 @@ export default function useLog(userId, date) {
       }
     },
     [userId, today, log]
+    [userId, today]
   );
 
   const loading = Boolean(requestKey) && resolvedKey !== requestKey;
