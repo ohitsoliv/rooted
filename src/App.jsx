@@ -1,18 +1,19 @@
 // src/App.jsx — Rooted Health Tracker
 // Root component: auth gate, routing, data orchestration
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import useAuth from "./hooks/useAuth";
 import useLog from "./hooks/useLog";
 import useLogs from "./hooks/useLogs";
 import { dateKey, saveLog } from "./firebase";
-import Home from "./pages/Home";
-import Log from "./pages/Log";
-import Summary from "./pages/Summary";
-import History from "./pages/History";
-import Export from "./pages/Export";
-import Login from "./pages/Login";
+
+const Home = lazy(() => import("./pages/Home"));
+const Log = lazy(() => import("./pages/Log"));
+const Summary = lazy(() => import("./pages/Summary"));
+const History = lazy(() => import("./pages/History"));
+const Export = lazy(() => import("./pages/Export"));
+const Login = lazy(() => import("./pages/Login"));
 
 /** Get the first and last day of the current month as YYYY-MM-DD strings. */
 function getMonthRange() {
@@ -111,7 +112,9 @@ export default function App() {
   if (!user) {
     return (
       <BrowserRouter>
-        <Login onLogin={login} error={authError} />
+        <Suspense fallback={null}>
+          <Login onLogin={login} error={authError} />
+        </Suspense>
       </BrowserRouter>
     );
   }
@@ -119,64 +122,66 @@ export default function App() {
   // --- Signed in ---
   return (
     <BrowserRouter>
-      <Routes>
-        <Route
-          path="/"
-          element={
-            <Home
-              user={user}
-              log={log}
-              completedSections={completedSections}
-              loggedDays={loggedDays}
-              goodEnough={goodEnough}
-              onGoodEnoughToggle={handleGoodEnoughToggle}
-              onLogout={logout}
-            />
-          }
-        />
-        <Route
-          path="/log"
-          element={
-            <Log
-              log={log}
-              completedSections={completedSections}
-              goodEnough={goodEnough}
-              onUpdateField={updateField}
-              onSaveSection={saveSection}
-              yesterdayLog={yesterdayLog}
-            />
-          }
-        />
-        <Route
-          path="/summary"
-          element={
-            <Summary
-              logs={monthLogs}
-              loading={monthLoading}
-            />
-          }
-        />
-        <Route
-          path="/history"
-          element={
-            <History
-              logs={monthLogs}
-              loading={monthLoading}
-            />
-          }
-        />
-        <Route
-          path="/export"
-          element={
-            <Export
-              logs={monthLogs}
-              loading={monthLoading}
-              onRestore={handleRestore}
-            />
-          }
-        />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <Suspense fallback={null}>
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <Home
+                user={user}
+                log={log}
+                completedSections={completedSections}
+                loggedDays={loggedDays}
+                goodEnough={goodEnough}
+                onGoodEnoughToggle={handleGoodEnoughToggle}
+                onLogout={logout}
+              />
+            }
+          />
+          <Route
+            path="/log"
+            element={
+              <Log
+                log={log}
+                completedSections={completedSections}
+                goodEnough={goodEnough}
+                onUpdateField={updateField}
+                onSaveSection={saveSection}
+                yesterdayLog={yesterdayLog}
+              />
+            }
+          />
+          <Route
+            path="/summary"
+            element={
+              <Summary
+                logs={monthLogs}
+                loading={monthLoading}
+              />
+            }
+          />
+          <Route
+            path="/history"
+            element={
+              <History
+                logs={monthLogs}
+                loading={monthLoading}
+              />
+            }
+          />
+          <Route
+            path="/export"
+            element={
+              <Export
+                logs={monthLogs}
+                loading={monthLoading}
+                onRestore={handleRestore}
+              />
+            }
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 }

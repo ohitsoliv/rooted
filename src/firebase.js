@@ -27,6 +27,30 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
+const requiredEnv = [
+  "VITE_FIREBASE_API_KEY",
+  "VITE_FIREBASE_AUTH_DOMAIN",
+  "VITE_FIREBASE_PROJECT_ID",
+  "VITE_FIREBASE_STORAGE_BUCKET",
+  "VITE_FIREBASE_MESSAGING_SENDER_ID",
+  "VITE_FIREBASE_APP_ID",
+];
+
+const missingEnv = requiredEnv.filter((key) => !import.meta.env[key]);
+
+if (missingEnv.length > 0) {
+  throw new Error(
+    `Missing Firebase env vars: ${missingEnv.join(", ")}. ` +
+      "Add them to .env.local and Vercel Project Settings -> Environment Variables."
+  );
+}
+
+if (!String(firebaseConfig.apiKey).startsWith("AIza")) {
+  throw new Error(
+    "Invalid VITE_FIREBASE_API_KEY value. Check your Firebase web app config in Firebase Console."
+  );
+}
+
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 const db = getFirestore(app);
