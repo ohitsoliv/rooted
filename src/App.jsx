@@ -98,6 +98,14 @@ export default function App() {
     refetchMonthLogs();
   }, [userId, refetchMonthLogs]);
 
+  const handleSaveSection = useCallback(async (sectionName) => {
+    const ok = await saveSection(sectionName);
+    if (ok) {
+      refetchMonthLogs();
+    }
+    return ok;
+  }, [saveSection, refetchMonthLogs]);
+
   // --- Auth loading screen ---
   if (authLoading) {
     return (
@@ -146,7 +154,7 @@ export default function App() {
                 completedSections={completedSections}
                 goodEnough={goodEnough}
                 onUpdateField={updateField}
-                onSaveSection={saveSection}
+                onSaveSection={handleSaveSection}
                 yesterdayLog={yesterdayLog}
               />
             }

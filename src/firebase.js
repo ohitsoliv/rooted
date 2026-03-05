@@ -59,6 +59,29 @@ const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: "select_account" });
 
+const localCacheKey = (userId) => `rooted_logs_${userId}`;
+
+function readLocalLogs(userId) {
+  if (typeof window === "undefined" || !userId) return {};
+  try {
+    const raw = window.localStorage.getItem(localCacheKey(userId));
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeLocalLogs(userId, logsByDate) {
+  if (typeof window === "undefined" || !userId) return;
+  try {
+    window.localStorage.setItem(localCacheKey(userId), JSON.stringify(logsByDate));
+  } catch {
+    return;
+  }
+}
+
 export { onAuthStateChanged };
 
 export const signInWithGoogle = () => signInWithPopup(auth, googleProvider);
@@ -74,32 +97,99 @@ export const dateKey = (date = new Date()) => {
 
 export async function fetchLog(userId, dayKey) {
   if (!userId || !dayKey) return {};
-  const ref = doc(db, "users", userId, "logs", dayKey);
-  const snap = await getDoc(ref);
-  return snap.exists() ? snap.data() : {};
+  try {
+    const ref = doc(db, "users", userId, "logs", dayKey);
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      const data = snap.data() || {};
+      const local = readLocalLogs(userId);
+      local[dayKey] = {
+        ...(local[dayKey] || {}),
+        ...data,
+      };
+      writeLocalLogs(userId, local);
+      return data;
+    }
+  } catch {
+    // fall back to local cache below
+  }
+
+  const local = readLocalLogs(userId);
+  return local[dayKey] || {};
 }
 
 export async function saveLog(userId, dayKey, payload) {
   if (!userId || !dayKey) return;
-  const ref = doc(db, "users", userId, "logs", dayKey);
-  await setDoc(ref, payload, { merge: true });
+
+  const local = readLocalLogs(userId);
+  local[dayKey] = {
+    ...(local[dayKey] || {}),
+    ...(payload || {}),
+  };
+  writeLocalLogs(userId, local);
+
+  try {
+    const ref = doc(db, "users", userId, "logs", dayKey);
+    await setDoc(ref, payload, { merge: true });
+  } catch {
+    return;
+  }
 }
 
 export async function fetchLogRange(userId, startDate, endDate) {
   if (!userId || !startDate || !endDate) return [];
 
-  const logsRef = collection(db, "users", userId, "logs");
-  const logsQuery = query(
-    logsRef,
-    where(documentId(), ">=", startDate),
-    where(documentId(), "<=", endDate)
-  );
-
-  const snapshot = await getDocs(logsQuery);
   const logs = [];
 
-  snapshot.forEach((docSnap) => {
-    logs.push({ date: docSnap.id, ...docSnap.data() });
+  try {
+    const logsRef = collection(db, "users", userId, "logs");
+    const logsQuery = query(
+      logsRef,
+      where(documentId(), ">=", startDate),
+      where(documentId(), "<=", endDate)
+    );
+
+    const snapshot = await getDocs(logsQuery);
+    snapshot.forEach((docSnap) => {
+      logs.push({ date: docSnap.id, ...docSnap.data() });
+    });
+  } catch {
+    const parseDateKey = (key) => {
+      const [year, month, day] = key.split("-").map((value) => parseInt(value, 10));
+      return new Date(Date.UTC(year, month - 1, day));
+    };
+
+    const toDateKey = (date) => {
+      const year = date.getUTCFullYear();
+      const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+      const day = String(date.getUTCDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    };
+
+    const cursor = parseDateKey(startDate);
+    const end = parseDateKey(endDate);
+
+    while (cursor <= end) {
+      const dayKey = toDateKey(cursor);
+      const ref = doc(db, "users", userId, "logs", dayKey);
+      const snap = await getDoc(ref);
+      if (snap.exists()) {
+        logs.push({ date: dayKey, ...snap.data() });
+      }
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+  }
+
+  const local = readLocalLogs(userId);
+  Object.entries(local).forEach(([date, data]) => {
+    if (date >= startDate && date <= endDate) {
+      const idx = logs.findIndex((entry) => entry.date === date);
+      if (idx >= 0) {
+        logs[idx] = { ...data, ...logs[idx], date };
+      } else {
+        logs.push({ date, ...(data || {}) });
+      }
+    }
   });
 
   logs.sort((a, b) => String(a.date).localeCompare(String(b.date)));

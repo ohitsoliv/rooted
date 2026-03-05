@@ -69,6 +69,7 @@ export default function BottomNav() {
           bottom: 0;
           left: 0;
           right: 0;
+          width: 100%;
           z-index: 100;
           display: flex;
           justify-content: space-around;
@@ -78,6 +79,15 @@ export default function BottomNav() {
           border-top: 1.5px solid var(--tan-light, #EDE3CF);
           padding-bottom: env(safe-area-inset-bottom, 0px);
           box-shadow: 0 -2px 12px rgba(59, 47, 47, 0.06);
+        }
+
+        @media (min-width: 480px) {
+          .bottom-nav {
+            max-width: 430px;
+            left: 50%;
+            right: auto;
+            transform: translateX(-50%);
+          }
         }
 
         .bottom-nav__tab {
