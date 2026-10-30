@@ -68,6 +68,7 @@ export const SITUATION_TAGS = [
   o("tired", "Tired"),
   o("meltdown", "Meltdown"),
   o("shutdown", "Shutdown"),
+  o("other", "Something else"),
   o("nothing", "Nothing in particular"),
 ];
 
@@ -103,11 +104,11 @@ export const CHECKIN_QUESTIONS = [
   { id: "painStop", prompt: "Is pain stopping you from doing things?", type: "single", options: PAIN_STOP_OPTIONS, ge: true },
   { id: "painWhere", prompt: "Where?", type: "multi", options: BODY_LOCATIONS, dk: false, showIf: (a) => a.painStop === "slow" || a.painStop === "stop" },
   {
-    id: "doing", prompt: "Doing anything about it?", hint: "Pick any", type: "multi", exclusive: "nothing",
+    id: "doing", fillIn: "other", prompt: "Doing anything about it?", hint: "Pick any", type: "multi", exclusive: "nothing",
     showIf: (a) => a.mood === "vlow" || a.mood === "low" || a.painStop === "slow" || a.painStop === "stop",
-    options: [o("rest", "Resting"), o("music", "Music"), o("alone", "Alone time"), o("saltWater", "Salt or water"), o("meds", "Meds"), o("moving", "Moving / stretching"), o("talking", "Talking to someone"), o("stim", "Stimming"), o("comfort", "Comfort thing (show, food, pet)"), o("nothing", "Nothing right now")],
+    options: [o("rest", "Resting"), o("music", "Music"), o("alone", "Alone time"), o("saltWater", "Salt or water"), o("meds", "Meds"), o("moving", "Moving / stretching"), o("talking", "Talking to someone"), o("stim", "Stimming"), o("comfort", "Comfort thing (show, food, pet)"), o("other", "Something else"), o("nothing", "Nothing right now")],
   },
-  { id: "situation", prompt: "What's going on?", hint: "Tap any that fit", type: "multi", options: SITUATION_TAGS },
+  { id: "situation", fillIn: "other", prompt: "What's going on?", hint: "Tap any that fit", type: "multi", options: SITUATION_TAGS },
   { id: "heartRate", prompt: "Heart rate", hint: "Optional, bpm", type: "number", optional: true, dk: false, min: 30, max: 250 },
   { id: "hrPosition", prompt: "Position when measured", type: "single", options: [o("lying", "Lying"), o("sitting", "Sitting"), o("standing", "Standing")], dk: false, showIf: (a) => Boolean(a.heartRate) },
   { id: "note", prompt: "Anything to note?", type: "text", optional: true, dk: false, placeholder: "Optional" },
@@ -141,8 +142,29 @@ const SLEEP = [
     options: [o("windDown", "Wind-down routine"), o("noScreens", "No screens"), o("meds", "Meds"), o("noise", "White noise / sound"), o("tired", "Tired from the day"), o("noIdea", "No idea")],
   },
   { id: "nightmares", prompt: "Nightmares?", type: "single", options: YES_NO },
+  {
+    id: "wantedDay", prompt: "What kind of day do you want today?", type: "single",
+    options: [o("rest", "Rest / sleep a lot"), o("easy", "Easy and low-key"), o("normal", "A normal day"), o("productive", "Get stuff done"), o("busy", "Big and busy")],
+  },
   { id: "nap", prompt: "Nap yesterday?", type: "single", optional: true, options: [o("none", "None", 0), o("short", "Short", 2), o("long", "Long", 4)] },
 ];
+
+export const WHO_OPTIONS = [
+  o("family", "Family"), o("partner", "Partner"), o("friends", "Friends"), o("online", "Online friends"),
+  o("classmates", "Classmates"), o("teachers", "Teachers / staff"), o("coworkers", "Coworkers"),
+  o("care", "Doctor / therapist"), o("strangers", "Strangers / crowds"), o("other", "Someone else"),
+];
+
+/**
+ * The "who" options, editable in Settings. Custom entries use their own text
+ * as the id, so labels still read correctly anywhere they're shown.
+ * "Someone else" (with a fill-in) is always kept at the end.
+ */
+export function whoOptions(profile) {
+  const list = profile?.whoList?.length ? profile.whoList : WHO_OPTIONS.filter((x) => x.id !== "other").map((x) => x.label);
+  const known = Object.fromEntries(WHO_OPTIONS.map((x) => [x.label, x.id]));
+  return [...list.map((label) => o(known[label] || label, label)), o("other", "Someone else")];
+}
 
 const SHIFT_TRIGGERS = [...SITUATION_TAGS.filter((t) => t.id !== "nothing"), o("outOfNowhere", "Out of nowhere")];
 
@@ -159,7 +181,7 @@ const DAY = [
     showIf: (a) => a.steady === "some" || a.steady === "big",
     options: [o("minutes", "Minutes"), o("hours", "A few hours"), o("most", "Most of the day"), o("days", "It's been going for days")],
   },
-  { id: "shiftTrigger", prompt: "Anything set it off?", type: "multi", options: SHIFT_TRIGGERS, showIf: (a) => a.steady === "some" || a.steady === "big" },
+  { id: "shiftTrigger", fillIn: "other", prompt: "Anything set it off?", type: "multi", options: SHIFT_TRIGGERS, showIf: (a) => a.steady === "some" || a.steady === "big" },
   {
     id: "anhedonia", prompt: "Did things you usually like feel boring or pointless?", type: "single",
     options: [o("no", "No", 0), o("bit", "A bit", 2), o("yes", "Yes", 4)],
@@ -173,13 +195,74 @@ const DAY = [
     options: [o("no", "No", 0), o("little", "A little", 2), o("lot", "A lot", 4)],
   },
   {
+    id: "dayFull", prompt: "How full was today?", type: "single", max: 3,
+    options: [o("light", "Light", 0), o("manageable", "Manageable", 1), o("packed", "Packed", 2), o("tooMuch", "Too much", 3)],
+  },
+  {
+    // Only when this morning's "What kind of day do you want?" was answered.
+    // QuestionSection passes it in as _wantedDay and shows it in the hint.
+    id: "gotDay", prompt: "Did you get the day you wanted?", type: "single",
+    showIf: (a) => Boolean(a._wantedDay) && a._wantedDay !== DK,
+    options: [o("yes", "Yes"), o("partly", "Partly"), o("no", "No")],
+  },
+  {
+    id: "insteadWhat", fillIn: "other", prompt: "What happened instead?", hint: "Pick any", type: "multi",
+    showIf: (a) => Boolean(a._wantedDay) && a._wantedDay !== DK && (a.gotDay === "partly" || a.gotDay === "no"),
+    options: [o("restedMore", "Rested or slept more than I wanted"), o("didLess", "Did less than I wanted"), o("didMore", "Did more than I wanted"), o("other", "Something else")],
+  },
+  // ---- People and alone time ----
+  {
+    id: "people", prompt: "Time with people today", type: "single", max: 3,
+    options: [o("none", "None", 0), o("little", "A little", 1), o("some", "Some", 2), o("lot", "A lot", 3)],
+  },
+  {
+    id: "who", fillIn: "other", prompt: "Who?", hint: "Pick any", type: "multi", optionsFromProfile: "whoList",
+    showIf: (a) => ["little", "some", "lot"].includes(a.people),
+    options: WHO_OPTIONS,
+  },
+  {
+    id: "peopleFelt", prompt: "How did people time feel?", type: "single",
+    showIf: (a) => ["little", "some", "lot"].includes(a.people),
+    options: [o("good", "Good", 0), o("okay", "Okay", 1), o("draining", "Draining", 3), o("hard", "Hard", 4)],
+  },
+  {
+    id: "drainingWho", prompt: "Who was it with?", hint: "Pick any", type: "multi",
+    showIf: (a) => (a.peopleFelt === "draining" || a.peopleFelt === "hard") && Array.isArray(a.who) && a.who.filter((x) => x !== DK).length > 1,
+    optionsFromProfile: "whoList",
+    optionsFrom: "who", // only the people picked above are shown
+    options: WHO_OPTIONS,
+  },
+  {
+    id: "batteryRespected", prompt: "Did you respect your social battery today?", type: "single",
+    options: [o("yes", "Yes"), o("no", "No")],
+  },
+  {
+    id: "batteryWhy", fillIn: "other", prompt: "What happened?", hint: "Pick any", type: "multi",
+    showIf: (a) => a.batteryRespected === "no",
+    options: [o("tooManyPlans", "Made too many plans"), o("tooLong", "Hung out too long"), o("other", "Something else")],
+  },
+  {
+    id: "batteryReceived", prompt: "How was it received by others?", type: "single",
+    showIf: (a) => a.batteryRespected === "yes",
+    options: [o("fine", "Fine"), o("understood", "They understood"), o("pushback", "Some pushback"), o("upset", "Someone was upset"), o("noticed", "Nobody noticed"), o("na", "Didn't come up")],
+  },
+  {
+    id: "aloneFelt", prompt: "Alone time today felt…", type: "single",
+    options: [o("none", "Didn't get any"), o("notEnough", "Not enough"), o("right", "About right"), o("tooMuch", "Too much")],
+  },
+  {
+    id: "aloneBlocked", fillIn: "other", prompt: "What got in the way?", hint: "Pick any", type: "multi",
+    showIf: (a) => a.aloneFelt === "none" || a.aloneFelt === "notEnough",
+    options: [o("school", "School"), o("work", "Work"), o("family", "Family needs"), o("plans", "Plans with people"), o("chores", "Chores"), o("couldntSayNo", "Couldn't say no"), o("other", "Something else")],
+  },
+  {
     id: "meltdown", prompt: "Meltdown or shutdown today?", type: "single",
     options: [o("no", "No"), o("almost", "Almost"), o("meltdown", "Meltdown"), o("shutdown", "Shutdown"), o("both", "Both")],
   },
   {
-    id: "helpedCalm", prompt: "What helped you come back down?", type: "multi", exclusive: "nothingYet",
+    id: "helpedCalm", fillIn: "other", prompt: "What helped you come back down?", type: "multi", exclusive: "nothingYet",
     showIf: (a) => ["almost", "meltdown", "shutdown", "both"].includes(a.meltdown),
-    options: [o("quiet", "Quiet or dark space"), o("headphones", "Headphones"), o("alone", "Alone time"), o("pressure", "Pressure / weighted blanket"), o("stim", "Stimming"), o("sleep", "Sleep"), o("someone", "Someone helped"), o("nothingYet", "Nothing yet")],
+    options: [o("quiet", "Quiet or dark space"), o("headphones", "Headphones"), o("alone", "Alone time"), o("pressure", "Pressure / weighted blanket"), o("stim", "Stimming"), o("sleep", "Sleep"), o("someone", "Someone helped"), o("other", "Something else"), o("nothingYet", "Nothing yet")],
   },
   {
     id: "bestPart", prompt: "Best part of today?", type: "multi", optional: true,
@@ -191,11 +274,35 @@ const BODY = [
   { id: "headache", prompt: "Headache", type: "single", options: SEVERITY, max: 3 },
   { id: "stomach", prompt: "Stomach (nausea, cramps)", type: "single", options: SEVERITY, max: 3 },
   { id: "tension", prompt: "Muscle tension or clenching", type: "single", options: SEVERITY, max: 3 },
+  // ---- Folded in from the old POTS / EDS sections ----
+  { id: "dizzy", prompt: "Dizzy or lightheaded", type: "single", options: SEVERITY, max: 3 },
+  { id: "faint", prompt: "Fainted or almost fainted?", type: "single", options: [o("no", "No"), o("almost", "Almost"), o("yes", "Yes")] },
+  { id: "flare", prompt: "Flare day?", type: "single", options: YES_NO },
+  { id: "dislocation", prompt: "Any dislocations?", type: "single", options: YES_NO },
+  {
+    id: "dislocationWhere", prompt: "Where?", type: "multi", dk: false, options: BODY_LOCATIONS,
+    showIf: (a) => a.dislocation === "yes",
+  },
+  {
+    id: "dislocationType", prompt: "Partial or total?", type: "single",
+    showIf: (a) => a.dislocation === "yes",
+    options: [o("partial", "Partial"), o("total", "Total"), o("both", "Both")],
+  },
+  {
+    id: "dislocationDuration", prompt: "Did it pop back in?", type: "single",
+    showIf: (a) => a.dislocation === "yes",
+    options: [o("popped", "Popped out and back in"), o("stayed", "Stayed out for a while")],
+  },
+  {
+    id: "dislocationHowLong", prompt: "For how long?", type: "single",
+    showIf: (a) => a.dislocation === "yes" && a.dislocationDuration === "stayed",
+    options: [o("minutes", "A few minutes"), o("hour", "Up to an hour"), o("hours", "Hours"), o("still", "Still out")],
+  },
   { id: "thinkClearly", prompt: "Was it hard to think clearly?", type: "single", options: SEVERITY, max: 3 },
   {
-    id: "helpedBody", prompt: "What helped your body today?", type: "multi", exclusive: "nothingWorked",
+    id: "helpedBody", fillIn: "other", prompt: "What helped your body today?", type: "multi", exclusive: "nothingWorked",
     showIf: (a) => ["headache", "stomach", "tension", "thinkClearly"].some((k) => a[k] === "hard" || a[k] === "couldnt"),
-    options: [o("lyingDown", "Lying down"), o("saltWater", "Salt or water"), o("compression", "Compression"), o("heatIce", "Heat or ice"), o("stretching", "Stretching"), o("meds", "Meds"), o("nothingWorked", "Nothing worked")],
+    options: [o("lyingDown", "Lying down"), o("saltWater", "Salt or water"), o("compression", "Compression"), o("heatIce", "Heat or ice"), o("stretching", "Stretching"), o("meds", "Meds"), o("other", "Something else"), o("nothingWorked", "Nothing worked")],
   },
   {
     id: "period", prompt: "Period today?", type: "single", dk: false,
@@ -234,13 +341,12 @@ const SCHOOL = [
   { id: "hyperfocus", prompt: "Got stuck on one thing for hours and missed other stuff?", type: "single", options: YES_NO },
   { id: "basicsHard", prompt: "Were basic things (shower, eating, replying to people) hard today?", type: "single", options: [o("no", "No", 0), o("some", "Some", 2), o("lot", "A lot", 4)] },
   { id: "sensory", prompt: "How loud, bright, or crowded was today?", type: "single", options: [o("calm", "Calm", 0), o("some", "Some", 1), o("lot", "A lot", 2), o("too", "Too much", 3)], max: 3 },
-  { id: "people", prompt: "Time with people", type: "single", options: [o("alone", "Mostly alone", 0), o("some", "Some", 1), o("lot", "A lot", 2)], max: 2 },
   { id: "masking", prompt: "Did you have to act \"normal\" or hide things a lot?", type: "single", options: [o("no", "No", 0), o("little", "A little", 2), o("lot", "A lot", 4)] },
   { id: "loved", prompt: "Time on things you love?", type: "single", options: [o("none", "None", 0), o("some", "Some", 2), o("lot", "A lot", 4)] },
   { id: "moved", prompt: "Moved your body or got outside?", type: "single", options: [o("no", "No", 0), o("little", "A little", 2), o("yes", "Yes", 4)] },
   { id: "screensLate", prompt: "On screens late at night?", type: "single", options: [o("no", "No", 0), o("some", "Some", 2), o("lot", "A lot", 4)] },
   {
-    id: "events", prompt: "Anything big happen?", type: "multi", optional: true,
+    id: "events", fillIn: "other", prompt: "Anything big happen?", type: "multi", optional: true,
     options: [o("conflict", "Conflict"), o("test", "Test"), o("cancelled", "Plans cancelled"), o("goodNews", "Good news"), o("loss", "Loss"), o("other", "Other")],
   },
   {
@@ -252,8 +358,8 @@ const SCHOOL = [
 
 const WRAP = [
   {
-    id: "helpedToday", prompt: "Something that helped today?", type: "multi", optional: true, exclusive: "nothing",
-    options: [o("rest", "Rest"), o("music", "Music"), o("alone", "Alone time"), o("people", "People"), o("outside", "Going outside"), o("food", "Good food"), o("meds", "Meds"), o("interest", "Favorite thing / special interest"), o("nothing", "Nothing really")],
+    id: "helpedToday", fillIn: "other", prompt: "Something that helped today?", type: "multi", optional: true, exclusive: "nothing",
+    options: [o("rest", "Rest"), o("music", "Music"), o("alone", "Alone time"), o("people", "People"), o("outside", "Going outside"), o("food", "Good food"), o("meds", "Meds"), o("interest", "Favorite thing / special interest"), o("other", "Something else"), o("nothing", "Nothing really")],
   },
   { id: "safety", prompt: "Any thoughts today of not wanting to be here, or of hurting yourself?", type: "single", options: SAFETY_OPTIONS, dk: false, ge: true, safety: true },
   { id: "dayNote", prompt: "Anything you want to remember about today?", type: "text", optional: true, dk: false, placeholder: "Optional — you choose later whether doctors see it" },
@@ -270,6 +376,10 @@ export const LOOKBACK_QUESTIONS = [
     id: "hindsight", prompt: "Anything look different now than it felt at the time?", type: "single",
     options: [o("no", "No"), o("wound", "I was more wound up than I realized"), o("lower", "I was lower than I realized"), o("both", "Both, at different times")],
   },
+  {
+    id: "squeezed", prompt: "Did anything get squeezed out this week?", hint: "Pick any", type: "multi", exclusive: "nothing",
+    options: [o("alone", "Alone time"), o("rest", "Rest"), o("friends", "Friends"), o("school", "School"), o("hobbies", "Hobbies"), o("nothing", "Nothing")],
+  },
   { id: "note", prompt: "Anything stand out?", type: "text", optional: true, dk: false, placeholder: "Optional" },
 ];
 
@@ -280,8 +390,6 @@ export const SECTIONS = [
   { id: "checkins", label: "Check-in", emoji: "📝", color: "terra", time: "~15 sec", custom: true, ge: true },
   { id: "mood", label: "Your day", emoji: "💜", color: "mauve", time: "~1 min", questions: DAY },
   { id: "symptoms", label: "Body", emoji: "🩺", color: "sage", time: "~20 sec", questions: BODY },
-  { id: "pots", label: "POTS", emoji: "💙", color: "teal", time: "~1 min", custom: true },
-  { id: "eds", label: "EDS", emoji: "🧡", color: "amber", time: "~1 min", custom: true },
   { id: "nutrition", label: "Fuel + meds", emoji: "🍽️", color: "gold", time: "~45 sec", questions: FUEL },
   { id: "habits", label: "School + focus", emoji: "⭐", color: "mauve", time: "~1 min", questions: SCHOOL },
   { id: "wrap", label: "Last check", emoji: "🌙", color: "terra", time: "~10 sec", questions: WRAP },
@@ -314,6 +422,10 @@ export const QUESTION_INDEX = (() => {
   for (const q of CHECKIN_QUESTIONS) idx[`checkin.${q.id}`] = { ...q, section: "checkin" };
   return idx;
 })();
+
+/** Short typed answer allowed when the "other" option is picked. Stored as `${id}Other`. */
+export const FILL_IN_MAX = 40;
+export const fillKey = (q) => `${q.id}Other`;
 
 export const hasDk = (q) => q.dk !== false && (q.type === "single" || q.type === "multi");
 

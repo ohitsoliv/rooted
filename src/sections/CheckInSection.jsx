@@ -7,8 +7,9 @@ import Question from "../components/Question";
 import FeelingPicker from "../components/FeelingPicker";
 import { describeFeeling } from "../feelings";
 import SkipLink from "../components/SkipLink";
+import { fillKey } from "../questions";
 import { CHECKIN_QUESTIONS, MOOD_OPTIONS, ACTIVATION_OPTIONS, BODY_OPTIONS, DK, isVisible, isAnswered } from "../questions";
-import { randomMessage, playTap } from "../utils";
+import { randomMessage } from "../utils";
 
 const COLOR = "terra";
 const font = "'Nunito', sans-serif";
@@ -31,7 +32,6 @@ function summary(ci) {
 export default function CheckInSection({ data = {}, onUpdate, onSave, onSkip, onCelebrate, goodEnough = false, profile }) {
   const checkins = useMemo(() => data.checkins || [], [data.checkins]);
   const [draft, setDraft] = useState({});
-  const [showFeeling, setShowFeeling] = useState(false);
   const [expanded, setExpanded] = useState(null);
 
   // Previous check-in's "doing" answer drives the "Did that help?" follow-up.
@@ -59,7 +59,10 @@ export default function CheckInSection({ data = {}, onUpdate, onSave, onSkip, on
     // Drop answers to questions that are no longer visible (e.g. "Where?" after pain set to No)
     const clean = {};
     for (const q of CHECKIN_QUESTIONS) {
-      if (isVisible(q, ctx, profile, false, "checkin") && isAnswered(draft[q.id])) clean[q.id] = draft[q.id];
+      if (isVisible(q, ctx, profile, false, "checkin") && isAnswered(draft[q.id])) {
+        clean[q.id] = draft[q.id];
+        if (q.fillIn && [].concat(draft[q.id]).includes(q.fillIn) && draft[fillKey(q)]) clean[fillKey(q)] = draft[fillKey(q)];
+      }
     }
     if (clean.didItHelp) clean.didItHelpFor = prevDoing;
     const f = draft.feeling;
@@ -67,7 +70,6 @@ export default function CheckInSection({ data = {}, onUpdate, onSave, onSkip, on
     const updated = [...checkins, { ...clean, timestamp: new Date().toISOString() }];
     onUpdate?.("checkins", updated);
     setDraft({});
-    setShowFeeling(false);
     onSave?.();
     onCelebrate?.({ emoji: "📝", title: "Check-in logged!", msg: randomMessage() });
   }, [draft, ctx, prevDoing, checkins, onUpdate, onSave, onCelebrate, profile]);
@@ -117,19 +119,17 @@ export default function CheckInSection({ data = {}, onUpdate, onSave, onSkip, on
 
       <div style={{ display: "flex", flexDirection: "column", gap: "20px", padding: "16px", background: "var(--cream)", borderRadius: "14px", border: "1.5px solid var(--tan-light)" }}>
         {visible.map((q) => (
-          <Question key={q.id} q={q} value={draft[q.id]} onChange={(v) => setField(q.id, v)} color={COLOR} profile={profile} />
+          <Question key={q.id} q={q} value={draft[q.id]} onChange={(v) => setField(q.id, v)} color={COLOR} profile={profile} fillValue={draft[fillKey(q)]} onFillChange={(v) => setField(fillKey(q), v)} />
         ))}
 
         {!goodEnough && (
-          showFeeling ? (
-            <div>
-              <FeelingPicker color={COLOR} value={draft.feeling || {}} onChange={(v) => setDraft((d) => ({ ...d, feeling: v }))} />
-            </div>
-          ) : (
-            <button type="button" onClick={() => { playTap(); setShowFeeling(true); }} style={{ alignSelf: "flex-start", background: "none", border: "none", padding: 0, fontFamily: font, fontSize: "13px", fontWeight: 600, color: `var(--${COLOR})`, textDecoration: "underline", cursor: "pointer" }}>
-              Want to add a feeling? (optional)
-            </button>
-          )
+          <fieldset style={{ border: "none", padding: 0, margin: 0 }}>
+            <legend style={{ fontFamily: font, fontSize: "15px", fontWeight: 700, color: "var(--brown)", padding: 0, marginBottom: "8px" }}>
+              Feeling
+              <span style={{ display: "block", fontSize: "12px", fontWeight: 500, color: "var(--brown-light)", marginTop: "2px" }}>Optional</span>
+            </legend>
+            <FeelingPicker color={COLOR} value={draft.feeling || {}} onChange={(v) => setDraft((d) => ({ ...d, feeling: v }))} />
+          </fieldset>
         )}
 
         <button

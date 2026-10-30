@@ -5,7 +5,7 @@
 import { normalizeDay, answerQuality } from "./normalize";
 import { findPatterns, masd, runs, addDays } from "./patterns";
 import { rollingBaselines, overallUsual, referenceBaseline, MIN_BASELINE_DAYS, BASELINE_WINDOW, MIN_REFERENCE_DAYS } from "./baseline";
-import { LOOKBACK_QUESTIONS, labelOf, SECTION_BY_ID, QUESTION_INDEX, SAFETY_OPTIONS, SITUATION_TAGS, BODY_LOCATIONS, MOOD_OPTIONS, ACTIVATION_OPTIONS, BODY_OPTIONS, PAIN_STOP_OPTIONS } from "../questions";
+import { WHO_OPTIONS, LOOKBACK_QUESTIONS, labelOf, SECTION_BY_ID, QUESTION_INDEX, SAFETY_OPTIONS, SITUATION_TAGS, BODY_LOCATIONS, MOOD_OPTIONS, ACTIVATION_OPTIONS, BODY_OPTIONS, PAIN_STOP_OPTIONS } from "../questions";
 import { medChangesInRange, sickDates } from "../profile";
 import { SENSATIONS } from "../feelings";
 import { PHQ9, GAD7, band } from "../screeners";
@@ -246,6 +246,12 @@ export function buildReport(rawLogs, profile = {}, { start, end, noteKeys = [], 
     overload: days.filter((d) => d.sensory != null && d.sensory >= 2.5).length,
     sensoryN: vals(days, "sensory").length,
     peopleLot: days.filter((d) => d.people === 4).length,
+    peopleAmount: tally(vals(days, "people").map((v) => QUESTION_INDEX["mood.people"].options.find((o) => (o.score * 4) / 3 === v)?.id).filter(Boolean), QUESTION_INDEX["mood.people"].options),
+    who: tally(days.flatMap((d) => d.who), WHO_OPTIONS),
+    drainDays: countTrue(days, "peopleDraining"),
+    drainN: answered(days, "peopleDraining"),
+    drainingWho: tally(days.flatMap((d) => d.drainingWho), WHO_OPTIONS),
+    alone: tally(vals(days, "aloneFelt"), QUESTION_INDEX["mood.aloneFelt"].options),
     peopleN: vals(days, "people").length,
     maskingLot: days.filter((d) => d.masking === 4).length,
     maskingN: vals(days, "masking").length,

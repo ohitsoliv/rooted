@@ -6,7 +6,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import BottomNav from "../components/BottomNav";
 import { dateKey } from "../firebase";
-import { SECTIONS, CHECKIN_QUESTIONS, LOCKED_SECTIONS } from "../questions";
+import { SECTIONS, CHECKIN_QUESTIONS, LOCKED_SECTIONS, whoOptions } from "../questions";
 
 const font = "'Nunito', sans-serif";
 const card = { background: "var(--white)", borderRadius: "20px", border: "1.5px solid var(--tan-light)", padding: "18px", display: "flex", flexDirection: "column", gap: "12px" };
@@ -134,6 +134,36 @@ function QuestionChooser({ hidden = [], onChange }) {
   );
 }
 
+function WhoList({ profile, onSave }) {
+  const [text, setText] = useState("");
+  const list = whoOptions(profile).filter((o) => o.id !== "other").map((o) => o.label);
+  const save = (next) => onSave(next);
+  return (
+    <section style={card}>
+      <h2 style={h2}>People list</h2>
+      <p style={sub}>The choices for "Who?" in Your day. Add the people or groups that matter to you; "Someone else" is always there too.</p>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+        {list.map((label) => (
+          <span key={label} style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontFamily: font, fontSize: "13px", fontWeight: 600, padding: "6px 6px 6px 12px", borderRadius: "999px", border: "1.5px solid var(--tan-light)", background: "var(--white)", color: "var(--brown)" }}>
+            {label}
+            <button type="button" aria-label={`Remove ${label}`} onClick={() => save(list.filter((x) => x !== label))}
+              style={{ border: "none", background: "var(--cream)", borderRadius: "999px", width: "22px", height: "22px", cursor: "pointer", color: "var(--brown-light)", fontWeight: 800 }}>
+              ×
+            </button>
+          </span>
+        ))}
+      </div>
+      <form onSubmit={(e) => { e.preventDefault(); const t = text.trim(); if (t && !list.includes(t)) save([...list, t]); setText(""); }} style={{ display: "flex", gap: "8px" }}>
+        <input value={text} maxLength={30} onChange={(e) => setText(e.target.value)} placeholder="Add someone (e.g. Mom, roommate)" style={input} />
+        <button type="submit" style={btn(false)}>Add</button>
+      </form>
+      {profile.whoList?.length > 0 && (
+        <button type="button" onClick={() => save([])} style={{ ...btn(false), alignSelf: "flex-start", border: "none", color: "var(--brown-light)" }}>Reset to the default list</button>
+      )}
+    </section>
+  );
+}
+
 function ReferencePeriod({ value, onSave }) {
   const [start, setStart] = useState(value?.start || "");
   const [end, setEnd] = useState(value?.end || "");
@@ -197,6 +227,8 @@ export default function Settings({ profile, onUpdate }) {
             })}
           </div>
         </section>
+
+        <WhoList profile={profile} onSave={(whoList) => onUpdate({ whoList })} />
 
         <QuestionChooser hidden={profile.hidden} onChange={(hidden) => onUpdate({ hidden })} />
 

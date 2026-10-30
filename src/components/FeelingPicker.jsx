@@ -1,12 +1,13 @@
 // src/components/FeelingPicker.jsx — Rooted Health Tracker
 // Optional feeling naming, built for alexithymia:
 //   • "Name it": tap a main feeling (that alone is a full answer), optionally
-//     tap a more specific word. Up to 2 feelings, for mixed states.
+//     tap one or more specific words. Up to 2 main feelings, for mixed states.
 //   • "Describe how it feels": body sensations, for when words don't come.
 //   • "Can't tell" is a real answer, not a skip.
 //
 // Value shape (stored on the check-in):
-//   { feelings: [{ core, word? }], sensations: [ids], cantTell: bool }
+//   { feelings: [{ core, words?: [] }], sensations: [ids], cantTell: bool }
+//   (older answers may have a single `word` instead of `words`)
 
 import { useState } from "react";
 import { playTap } from "../utils";
@@ -48,8 +49,17 @@ export default function FeelingPicker({ value = {}, onChange, color = "terra" })
       setOpen(core);
     }
   };
-  const setWord = (core, word) =>
-    set({ feelings: feelings.map((f) => (f.core === core ? { ...f, word: f.word === word ? undefined : word } : f)) });
+  const wordsOf = (f) => f.words || (f.word ? [f.word] : []);
+  const toggleWord = (core, word) =>
+    set({
+      feelings: feelings.map((f) => {
+        if (f.core !== core) return f;
+        const cur = wordsOf(f);
+        const words = cur.includes(word) ? cur.filter((w) => w !== word) : [...cur, word];
+        const { word: _old, ...rest } = f;
+        return words.length ? { ...rest, words } : rest;
+      }),
+    });
   const toggleSensation = (id) =>
     set({ sensations: sensations.includes(id) ? sensations.filter((x) => x !== id) : [...sensations, id] });
 
@@ -73,24 +83,24 @@ export default function FeelingPicker({ value = {}, onChange, color = "terra" })
       {mode === "name" ? (
         <>
           <span style={{ fontFamily: font, fontSize: "12px", color: "var(--brown-light)" }}>
-            Tap the closest one. That's enough — the specific word is extra. Pick up to {MAX} if it's mixed.
+            Tap the closest one. That's enough — specific words are extra. Pick up to {MAX} if it's mixed.
           </span>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
             {FEELINGS.map((f) => {
               const sel = feelings.find((x) => x.core === f.core);
               return (
                 <Pill key={f.core} color={color} selected={Boolean(sel)} onClick={() => toggleCore(f.core)}>
-                  {f.emoji} {f.core}{sel?.word ? ` · ${sel.word}` : ""}
+                  {f.emoji} {f.core}{sel && wordsOf(sel).length ? ` · ${wordsOf(sel).join(", ")}` : ""}
                 </Pill>
               );
             })}
           </div>
           {openCore && openSel && (
             <div style={{ display: "flex", flexDirection: "column", gap: "8px", padding: "10px", background: "var(--white)", borderRadius: "12px", border: "1.5px solid var(--tan-light)" }}>
-              <span style={{ fontFamily: font, fontSize: "12px", fontWeight: 700, color: "var(--brown)" }}>More specific? (optional)</span>
+              <span style={{ fontFamily: font, fontSize: "12px", fontWeight: 700, color: "var(--brown)" }}>More specific? Pick any (optional)</span>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
                 {openCore.words.map((w) => (
-                  <Pill key={w} color={color} selected={openSel.word === w} onClick={() => setWord(open, w)}>{w}</Pill>
+                  <Pill key={w} color={color} selected={wordsOf(openSel).includes(w)} onClick={() => toggleWord(open, w)}>{w}</Pill>
                 ))}
               </div>
               <button type="button" onClick={() => setOpen(null)} style={{ alignSelf: "flex-start", background: "none", border: "none", padding: 0, fontFamily: font, fontSize: "12px", fontWeight: 700, color: `var(--${color})`, cursor: "pointer" }}>
@@ -102,7 +112,7 @@ export default function FeelingPicker({ value = {}, onChange, color = "terra" })
             <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
               {feelings.map((f) => (
                 <button key={f.core} type="button" onClick={() => setOpen(f.core)} style={{ background: "none", border: "none", padding: 0, fontFamily: font, fontSize: "12px", color: "var(--brown-light)", textDecoration: "underline", cursor: "pointer" }}>
-                  More specific {f.core.toLowerCase()} word
+                  More specific {f.core.toLowerCase()} words
                 </button>
               ))}
             </div>

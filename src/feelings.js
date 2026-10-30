@@ -26,7 +26,10 @@ export const SENSATIONS = [
 export function describeFeeling(ci) {
   if (ci?.feeling?.cantTell) return "Can't tell";
   const parts = [];
-  for (const f of ci?.feeling?.feelings || []) parts.push(f.word ? `${f.core} (${f.word})` : f.core);
+  for (const f of ci?.feeling?.feelings || []) {
+    const words = f.words || (f.word ? [f.word] : []);
+    parts.push(words.length ? `${f.core} (${words.join(", ")})` : f.core);
+  }
   const sens = (ci?.feeling?.sensations || []).map((id) => SENSATIONS.find((s) => s.id === id)?.label || id);
   if (sens.length) parts.push(`feels ${sens.join(", ").toLowerCase()}`);
   if (!parts.length && ci?.emotion) parts.push(ci.emotion); // older emotion-wheel answers

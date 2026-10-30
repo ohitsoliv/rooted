@@ -46,7 +46,7 @@ function daysCsv(logs, { includeNotes, includeSubstances }) {
   const rows = logs.map((log) => {
     const d = normalizeDay(log);
     return [d.date, d.backfilled ? "yes" : "", d.checkinCount, d.mood?.toFixed(2), d.moodMin, d.moodMax, d.activation?.toFixed(2), d.body?.toFixed(2), d.mismatch, d.painStop, d.sleepHours, d.medsMissed, d.potsAny, d.flare, d.hrMax,
-      ...qs.map(({ s, q }) => labelOf(q, log[s.id]?.[q.id]))];
+      ...qs.map(({ s, q }) => labelOf(q, log[s.id]?.[q.id]) + (includeNotes && log[s.id]?.[`${q.id}Other`] ? ` (${log[s.id][`${q.id}Other`]})` : ""))];
   });
   return toCsv([head, ...rows]);
 }

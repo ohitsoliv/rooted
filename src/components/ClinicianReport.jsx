@@ -170,7 +170,10 @@ export default function ClinicianReport({ report }) {
         <Section title="Sensory and social">
           <Rows rows={[
             ["Loud/bright/crowded: a lot or too much", sensory.sensoryN ? `${sensory.overload} of ${sensory.sensoryN} days` : "not answered"],
-            ["A lot of people time", sensory.peopleN ? `${sensory.peopleLot} of ${sensory.peopleN} days` : "not answered"],
+            ["Time with people", sensory.peopleN ? list(sensory.peopleAmount) : "not answered"],
+            sensory.who.length ? ["Who (days)", list(sensory.who, 8)] : null,
+            sensory.drainN ? ["People time felt draining or hard", `${sensory.drainDays} of ${sensory.drainN} days${sensory.drainingWho.length ? ` · with: ${list(sensory.drainingWho, 6)}` : ""}`] : null,
+            sensory.alone.length ? ["Alone time felt", list(sensory.alone)] : null,
             ["Masked a lot", sensory.maskingN ? `${sensory.maskingLot} of ${sensory.maskingN} days` : "not answered"],
             ["No time on things they love", sensory.lovedN ? `${sensory.lovedNone} of ${sensory.lovedN} days` : "not answered"],
             ["Meltdown/shutdown days", `${sensory.meltDays}`],

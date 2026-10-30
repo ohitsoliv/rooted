@@ -41,8 +41,8 @@ export const BACKFILL_QUESTIONS = [
     ],
   },
   {
-    section: "eds",
-    field: "flareDay",
+    section: "symptoms",
+    field: "flare",
     type: "yesno",
     prompt: "Was it a flare day?",
   },

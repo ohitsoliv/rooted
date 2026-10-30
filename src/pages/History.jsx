@@ -681,7 +681,7 @@ function AnswerList({ log }) {
   const cis = checkinList(log);
   cis.forEach((ci, i) => {
     const rows = CHECKIN_QUESTIONS.filter((q) => isAnswered(ci[q.id]))
-      .map((q) => [q.prompt, q.options ? labelOf(q, ci[q.id]) : String(ci[q.id])]);
+      .map((q) => [q.prompt, (q.options ? labelOf(q, ci[q.id]) : String(ci[q.id])) + (ci[`${q.id}Other`] ? ` (${ci[`${q.id}Other`]})` : "")]);
     if (describeFeeling(ci)) rows.push(["Feeling", describeFeeling(ci)]);
     if (rows.length) {
       const time = ci.timestamp ? new Date(ci.timestamp).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : `#${i + 1}`;
@@ -691,7 +691,7 @@ function AnswerList({ log }) {
   for (const s of SECTIONS) {
     if (!s.questions) continue;
     const data = log[s.id] || {};
-    const rows = s.questions.filter((q) => q.type !== "meds" && isAnswered(data[q.id])).map((q) => [q.prompt, labelOf(q, data[q.id])]);
+    const rows = s.questions.filter((q) => q.type !== "meds" && isAnswered(data[q.id])).map((q) => [q.prompt, labelOf(q, data[q.id]) + (data[`${q.id}Other`] ? ` (${data[`${q.id}Other`]})` : "")]);
     if (s.id === "nutrition" && data.meds && typeof data.meds === "object") {
       const statuses = Object.values(data.meds).filter((v) => v && typeof v === "object" && v.status).map((v) => v.status);
       if (statuses.length) rows.unshift(["Meds", statuses.join(", ")]);

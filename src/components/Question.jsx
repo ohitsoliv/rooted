@@ -3,7 +3,7 @@
 // "Don't know" chip, stored as "dk" (distinct from skipping).
 
 import { Link } from "react-router-dom";
-import { DK, hasDk } from "../questions";
+import { DK, hasDk, FILL_IN_MAX } from "../questions";
 import { playTap } from "../utils";
 
 const font = "'Nunito', sans-serif";
@@ -170,7 +170,7 @@ function MedsQuestion({ value, onChange, color, profile }) {
   );
 }
 
-export default function Question({ q, value, onChange, color = "terra", profile }) {
+export default function Question({ q, value, onChange, color = "terra", profile, fillValue, onFillChange }) {
   const dk = hasDk(q);
 
   let body = null;
@@ -236,6 +236,7 @@ export default function Question({ q, value, onChange, color = "terra", profile 
   }
 
   const isDk = value === DK || (Array.isArray(value) && value.includes(DK));
+  const fillOpen = q.fillIn && onFillChange && (Array.isArray(value) ? value.includes(q.fillIn) : value === q.fillIn);
 
   return (
     <fieldset style={{ border: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "8px", animation: "question-reveal 0.25s ease-out" }}>
@@ -244,6 +245,17 @@ export default function Question({ q, value, onChange, color = "terra", profile 
         {q.hint && <span style={{ display: "block", fontSize: "12px", fontWeight: 500, color: "var(--brown-light)", marginTop: "2px" }}>{q.hint}</span>}
       </legend>
       {body}
+      {fillOpen && (
+        <input
+          type="text"
+          maxLength={FILL_IN_MAX}
+          value={fillValue || ""}
+          placeholder={`Something else (up to ${FILL_IN_MAX} letters)`}
+          aria-label={`${q.prompt} — something else`}
+          onChange={(e) => onFillChange(e.target.value || undefined)}
+          style={{ ...inputStyle, fontSize: "14px" }}
+        />
+      )}
       {dk && (
         <div>
           <Chip color={color} muted selected={isDk} onClick={() => onChange(isDk ? undefined : q.type === "multi" ? [DK] : DK)}>

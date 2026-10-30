@@ -17,6 +17,7 @@ export const EMPTY_PROFILE = {
   trustedContact: { name: "", phone: "" },
   lastScreener: null,
   defaultMode: "full", // "full" | "good" | "bare"
+  whoList: [], // labels for "Who?"; empty = default list
   hidden: [], // "section" or "section.question" keys the person turned off
   sickEpisodes: [], // [{ start, end|null }] — end null = still sick/injured
   lastLookback: null,

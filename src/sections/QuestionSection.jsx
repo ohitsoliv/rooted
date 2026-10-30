@@ -4,7 +4,7 @@
 import { useCallback } from "react";
 import Question from "../components/Question";
 import SkipLink from "../components/SkipLink";
-import { isVisible } from "../questions";
+import { isVisible, fillKey, whoOptions, QUESTION_INDEX, labelOf } from "../questions";
 import { randomMessage } from "../utils";
 
 export default function QuestionSection({
@@ -17,9 +17,18 @@ export default function QuestionSection({
   goodEnough = false,
   profile,
   onSafety,
+  dayLog = {},
 }) {
   const color = section.color;
-  const visible = section.questions.filter((q) => isVisible(q, data, profile, goodEnough, section.id));
+  // Answers from other sections that some questions here depend on
+  const wanted = dayLog.sleep?.wantedDay;
+  const ctx = { ...data, _wantedDay: wanted };
+  const visible = section.questions
+    .filter((q) => isVisible(q, ctx, profile, goodEnough, section.id))
+    .map((q) => (q.id === "gotDay" ? { ...q, hint: `This morning: ${labelOf(QUESTION_INDEX["sleep.wantedDay"], wanted)}` } : q))
+    .map((q) => (q.optionsFromProfile === "whoList" ? { ...q, options: whoOptions(profile) } : q))
+    // optionsFrom: only offer the options picked in another question
+    .map((q) => (q.optionsFrom ? { ...q, options: q.options.filter((x) => (data[q.optionsFrom] || []).includes(x.id)) } : q));
 
   const handleChange = useCallback(
     (q, value) => {
@@ -56,7 +65,10 @@ export default function QuestionSection({
       </div>
 
       {visible.map((q) => (
-        <Question key={q.id} q={q} value={data[q.id]} onChange={(v) => handleChange(q, v)} color={color} profile={profile} />
+        <Question
+          key={q.id} q={q} value={data[q.id]} onChange={(v) => handleChange(q, v)} color={color} profile={profile}
+          fillValue={data[fillKey(q)]} onFillChange={(v) => onUpdate?.(fillKey(q), v)}
+        />
       ))}
 
       <button

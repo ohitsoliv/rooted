@@ -56,6 +56,9 @@ export function normalizeDay(log = {}) {
   const legacyPain = nums(cis.map((c) => (typeof c.pain === "number" ? c.pain : null)));
   const legacyEnergy = nums(cis.map((c) => (typeof c.energy === "number" ? c.energy : null)));
   const situation = [...new Set(cis.flatMap((c) => arr(c.situation)))];
+  const dizzyScore = scoreOf(Q("symptoms.dizzy"), body.dizzy);
+  const dizzyNew = dizzyScore == null ? null : dizzyScore > 0;
+  const faintNew = body.faint === "yes" || body.faint === "almost" ? true : body.faint === "no" ? false : null;
   const hrs = nums([...cis.map((c) => c.heartRate), Number(pots.heartRate) || null]);
 
   let mood = mean(moods);
@@ -166,17 +169,20 @@ export function normalizeDay(log = {}) {
     thinkHard: scoreOf(Q("symptoms.thinkClearly"), body.thinkClearly),
     period: body.period ? body.period === "yes" || body.period === "spotting" : null,
 
-    dizzy: typeof pots.dizziness === "boolean" ? pots.dizziness : null,
+    // New Body questions first; older days fall back to the old POTS/EDS sections.
+    dizzy: dizzyNew != null ? dizzyNew : typeof pots.dizziness === "boolean" ? pots.dizziness : null,
     palpitations: typeof pots.palpitations === "boolean" ? pots.palpitations : null,
-    fainting: typeof pots.fainting === "boolean" ? pots.fainting : null,
+    fainting: faintNew != null ? faintNew : typeof pots.fainting === "boolean" ? pots.fainting : null,
     worseStanding: yes(pots.worseStanding),
-    potsAny: [pots.dizziness, pots.palpitations, pots.fainting].some((x) => typeof x === "boolean")
-      ? Boolean(pots.dizziness || pots.palpitations || pots.fainting)
+    potsAny: [dizzyNew, faintNew, pots.dizziness, pots.palpitations, pots.fainting].some((x) => typeof x === "boolean")
+      ? Boolean(dizzyNew || faintNew || pots.dizziness || pots.palpitations || pots.fainting)
       : null,
-    flare: typeof eds.flareDay === "boolean" ? eds.flareDay : null,
+    flare: body.flare === "yes" || body.flare === true ? true : body.flare === "no" || body.flare === false ? false : typeof eds.flareDay === "boolean" ? eds.flareDay : null,
     jointPain: typeof eds.jointPain === "boolean" ? eds.jointPain : null,
-    joints: Array.isArray(eds.jointPainLocations) ? eds.jointPainLocations : [],
-    subluxation: typeof eds.subluxation === "boolean" ? eds.subluxation : null,
+    joints: [...(Array.isArray(eds.jointPainLocations) ? eds.jointPainLocations : []), ...arr(body.dislocationWhere)],
+    subluxation: body.dislocation === "yes" ? true : body.dislocation === "no" ? false : typeof eds.subluxation === "boolean" ? eds.subluxation : null,
+    dislocationType: body.dislocationType && body.dislocationType !== DK ? body.dislocationType : null,
+    dislocationDuration: body.dislocationDuration === "stayed" ? body.dislocationHowLong || "stayed" : body.dislocationDuration || null,
 
     medStatuses: statuses,
     medsMissed,
@@ -198,7 +204,16 @@ export function normalizeDay(log = {}) {
     hyperfocus: yes(sch.hyperfocus),
     basicsHard: scoreOf(Q("habits.basicsHard"), sch.basicsHard),
     sensory: scoreOf(Q("habits.sensory"), sch.sensory),
-    people: scoreOf(Q("habits.people"), sch.people),
+    people: scoreOf(Q("mood.people"), day.people),
+    who: arr(day.who),
+    peopleDraining: day.peopleFelt && day.peopleFelt !== DK ? ["draining", "hard"].includes(day.peopleFelt) : null,
+    peopleFelt: day.peopleFelt && day.peopleFelt !== DK ? day.peopleFelt : null,
+    // If only one kind of person was picked, that's who the draining time was with
+    drainingWho: ["draining", "hard"].includes(day.peopleFelt) ? (arr(day.who).length === 1 ? arr(day.who) : arr(day.drainingWho)) : [],
+    batteryRespected: day.batteryRespected === "yes" ? true : day.batteryRespected === "no" ? false : null,
+    batteryWhy: arr(day.batteryWhy),
+    batteryReceived: day.batteryReceived && day.batteryReceived !== DK ? day.batteryReceived : null,
+    aloneFelt: day.aloneFelt && day.aloneFelt !== DK ? day.aloneFelt : null,
     masking: scoreOf(Q("habits.masking"), sch.masking),
     loved: scoreOf(Q("habits.loved"), sch.loved),
     events: arr(sch.events),

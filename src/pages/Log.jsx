@@ -6,8 +6,6 @@ import { useLocation, useNavigate } from "react-router-dom";
 import BottomNav from "../components/BottomNav";
 import Celebration from "../components/Celebration";
 import CheckInSection from "../sections/CheckInSection";
-import POTSSection from "../sections/POTSSection";
-import EDSSection from "../sections/EDSSection";
 import QuestionSection from "../sections/QuestionSection";
 import { SECTION_BY_ID, sectionsFor } from "../questions";
 
@@ -134,13 +132,9 @@ export default function Log({
     switch (activeSection) {
       case "checkins":
         return <CheckInSection {...sectionProps} profile={profile} />;
-      case "pots":
-        return <POTSSection {...sectionProps} />;
-      case "eds":
-        return <EDSSection {...sectionProps} />;
       default:
         return meta.questions ? (
-          <QuestionSection key={activeSection} section={meta} {...sectionProps} profile={profile} onSafety={onSafety} />
+          <QuestionSection key={activeSection} section={meta} {...sectionProps} profile={profile} onSafety={onSafety} dayLog={log} />
         ) : null;
     }
   };
