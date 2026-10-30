@@ -50,7 +50,7 @@ export default function Log({
   profile,
   onSafety,
 }) {
-  const SECTION_ORDER = useMemo(() => sectionsFor(goodEnough).map((x) => x.id), [goodEnough]);
+  const SECTION_ORDER = useMemo(() => sectionsFor(goodEnough, profile).map((x) => x.id), [goodEnough, profile]);
   const SECTION_META = SECTION_BY_ID;
   const location = useLocation();
   const navigate = useNavigate();
@@ -86,8 +86,15 @@ export default function Log({
     [activeSection, onUpdateField]
   );
 
+  const [saveError, setSaveError] = useState("");
   const handleSave = useCallback(async () => {
-    await onSaveSection?.(activeSection);
+    setSaveError("");
+    const ok = await onSaveSection?.(activeSection);
+    if (ok === false) {
+      // Sections celebrate right away; take it back if the save failed.
+      setCelebration(null);
+      setSaveError("That didn't save. Your answers are still on screen — try again. If it keeps happening, your device storage may be full.");
+    }
   }, [activeSection, onSaveSection]);
 
   const handleCelebrate = useCallback((celebrationData) => {
@@ -257,6 +264,12 @@ export default function Log({
           })}
         </div>
       </header>
+
+      {saveError && (
+        <p role="alert" style={{ margin: "0 16px 12px", padding: "10px 12px", borderRadius: "12px", background: "#FBE9E4", border: "1.5px solid var(--terra)", color: "var(--terra-dark)", fontFamily: "'Nunito', sans-serif", fontSize: "13px", fontWeight: 700 }}>
+          {saveError}
+        </p>
+      )}
 
       {/* Section content */}
       <main style={{

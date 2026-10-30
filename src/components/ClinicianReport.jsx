@@ -5,8 +5,9 @@
 import ReportChart from "./ReportChart";
 import { fmt, shortDate } from "../analysis/report";
 import { sentence, checkedLabel, MIN_N } from "../analysis/patterns";
+import { MIN_BASELINE_DAYS } from "../analysis/baseline";
 import { PHQ9, GAD7 } from "../screeners";
-import { MOOD_OPTIONS, ACTIVATION_OPTIONS, PAIN_STOP_OPTIONS } from "../questions";
+import { MOOD_OPTIONS, ACTIVATION_OPTIONS, BODY_OPTIONS, PAIN_STOP_OPTIONS } from "../questions";
 
 const longDate = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
 const pct = (a, b) => (b ? `${Math.round((a / b) * 100)}%` : "—");
@@ -53,8 +54,10 @@ export default function ClinicianReport({ report }) {
 
         <table className="rr-kv rr-top">
           <tbody>
-            <tr><th>Coverage</th><td>{r.logged} of {r.totalDays} days logged ({pct(r.logged, r.totalDays)}) · {r.checkins} check-ins · {r.backfilled} day{r.backfilled === 1 ? "" : "s"} filled in later from memory</td></tr>
+            <tr><th>Coverage</th><td>{r.logged} of {r.totalDays} days logged ({pct(r.logged, r.totalDays)}) · {r.checkins} check-ins · {r.backfilled} day{r.backfilled === 1 ? "" : "s"} filled in later from memory{r.goodDays || r.bareDays.length ? ` · shorter log: ${r.goodDays} quick, ${r.bareDays.length} bare-minimum` : ""}</td></tr>
             <tr><th>Current meds</th><td>{meds.current.length ? meds.current.map((m) => `${m.name}${m.dose ? ` ${m.dose}` : ""}`).join("; ") : "not entered"}{meds.changes.length ? ` · Changes in period: ${meds.changes.map((c) => `${shortDate(c.date)} ${c.text}`).join("; ")}` : ""}</td></tr>
+            {r.reference && !r.reference.insufficient && <tr><th>Okay-period usual</th><td>{shortDate(r.reference.start)}–{shortDate(r.reference.end)} (chosen by the patient): {[r.reference.mood != null && `mood ${fmt(r.reference.mood)}`, r.reference.activation != null && `mind ${fmt(r.reference.activation)}`, r.reference.body != null && `body ${fmt(r.reference.body)}`].filter(Boolean).join(" · ")}</td></tr>}
+            <tr><th>Typical in this period</th><td>{r.usual.ready ? [r.usual.mood && `mood ${r.usual.mood}`, r.usual.mind && `mind ${r.usual.mind}`, r.usual.body && `body ${r.usual.body}`, r.usual.pain && `pain in the way: ${r.usual.pain.toLowerCase()}`, r.usual.sleep && `sleep ${r.usual.sleep}`].filter(Boolean).join(" · ") : `needs ${MIN_BASELINE_DAYS}+ logged days`}</td></tr>
           </tbody>
         </table>
 
@@ -74,9 +77,10 @@ export default function ClinicianReport({ report }) {
               ))}
             </tbody>
           </table>
+          <p className="rr-muted rr-small">{r.baselineBasis}</p>
         </Section>
 
-        <Section title="Mood, activation, and sleep">
+        <Section title="Mood, mind, body, and sleep">
           <ReportChart report={r} />
         </Section>
 
@@ -89,7 +93,7 @@ export default function ClinicianReport({ report }) {
             <p>{r.patterns.testedCount ? "No differences large enough to report." : `Not enough data yet — each comparison needs at least ${MIN_N} days in both groups.`}</p>
           )}
           {r.patterns.noPattern.length > 0 && (
-            <p className="rr-muted rr-small">Checked, no clear difference: {r.patterns.noPattern.slice(0, 4).map(checkedLabel).join("; ")}{r.patterns.noPattern.length > 4 ? `; and ${r.patterns.noPattern.length - 4} more` : ""}.</p>
+            <p className="rr-muted rr-small">Checked, no clear difference: {r.patterns.noPattern.slice(0, 2).map(checkedLabel).join("; ")}{r.patterns.noPattern.length > 2 ? `; and ${r.patterns.noPattern.length - 2} more` : ""}.</p>
           )}
           <p className="rr-muted rr-small">These are associations in one person's self-reported data, not causes. Reported only when both groups have {MIN_N}+ days and the gap is at least 0.75 points (0–4 scales), 25 percentage points (yes/no), 1 hour (sleep), or 10 bpm.</p>
         </Section>
@@ -102,19 +106,26 @@ export default function ClinicianReport({ report }) {
         <Section title="Mood stability">
           <Rows rows={[
             ["Mood", statLine(mood.stat)],
-            ["Activation", statLine(mood.activation)],
+            ["Mind speed", statLine(mood.activation)],
+            ["Body energy", statLine(mood.body)],
+            ["Mood below usual while mind above usual (same check-in)", mood.mismatchN ? `${mood.mismatchDays} of ${mood.mismatchN} days` : "no data"],
+            mood.baselineDays ? ["Compared with their usual", `mood 1+ below usual on ${mood.moodBelowUsual} days; mind 1+ above usual on ${mood.mindAboveUsual} days (of ${mood.baselineDays} days with a baseline)`] : null,
             ["Day-to-day change", mood.masd ? `${fmt(mood.masd.value, 2)} points on average between consecutive days (n=${mood.masd.n} pairs)` : "not enough consecutive days"],
             ["Within-day swings of 2+ points", mood.multiCheckinDays ? `${mood.swingDays} of ${mood.multiCheckinDays} days with 2+ check-ins` : "no days with 2+ check-ins"],
-            ["Longest low stretch (mood low or very low)", mood.longestLow ? `${mood.longestLow.length} day${mood.longestLow.length === 1 ? "" : "s"} (${shortDate(mood.longestLow.start)}–${shortDate(mood.longestLow.end)})` : "none"],
-            ["Longest high-activation stretch", mood.longestHigh ? `${mood.longestHigh.length} day${mood.longestHigh.length === 1 ? "" : "s"} (${shortDate(mood.longestHigh.start)}–${shortDate(mood.longestHigh.end)})` : "none"],
+            ["Longest stretch with mood below their usual", mood.longestLow ? `${mood.longestLow.length} day${mood.longestLow.length === 1 ? "" : "s"} (${shortDate(mood.longestLow.start)}–${shortDate(mood.longestLow.end)})` : "none"],
+            ["Longest stretch with mind above their usual", mood.longestHigh ? `${mood.longestHigh.length} day${mood.longestHigh.length === 1 ? "" : "s"} (${shortDate(mood.longestHigh.start)}–${shortDate(mood.longestHigh.end)})` : "none"],
             ["How steady (self-rated)", list(mood.steady)],
             ["How long the biggest shift lasted", list(mood.shiftLength)],
             ["What set shifts off", list(mood.triggers, 8)],
-            ["Talking a lot or fast (told by others)", `${mood.talkingFast} days`],
-            ["Started several new projects", `${mood.newProjects} days`],
-            ["Felt no need to rest", `${mood.noRest} days`],
-            ["Days with 2+ of the three above", `${mood.hypomanicSignDays}`],
-            ["Impulsive actions", list(mood.impulsive)],
+            ["\"Had more…\" chatting", `${mood.talkingFast} days`],
+            ["\"Had more…\" ideas or plans", `${mood.newProjects} days`],
+            ["\"Had more…\" energy", `${mood.noRest} days`],
+            ["\"Had more…\" things wanted to buy", `${mood.moreBuying} days`],
+            ["Days with 2+ of the four above", `${mood.hypomanicSignDays}`],
+            ["…of those, with short sleep without tiredness or mind above usual", mood.activationCombo.length ? `${mood.activationCombo.length} (${mood.activationCombo.map(shortDate).join(", ")})` : "none"],
+            ["\"Surprised myself by…\" (unplanned actions)", list(mood.impulsive)],
+            mood.feelingAnswered ? ["Feelings named (optional; main category, times picked)", `${list(mood.feelings, 7)}${mood.cantTell ? ` · "can't tell" ${mood.cantTell}×` : ""}`] : null,
+            mood.sensations.length ? ["Body sensations described", list(mood.sensations, 6)] : null,
             ["Usual interests felt boring or pointless", `${mood.anhedoniaDays} days (a bit or yes)`],
             ["Thought someone was mad or pulling away", `${mood.othersMadDays} days (a little or a lot)`],
           ]} />
@@ -126,6 +137,7 @@ export default function ClinicianReport({ report }) {
             ["Quality", statLine(sleep.quality)],
             ["Nights under 6 h", `${sleep.short}`],
             ["…of those, not feeling tired", `${sleep.shortNotTired}`],
+            ["Nights 2+ h below their usual", `${sleep.belowUsual}`],
             ["Nightmares", of(sleep.nightmares, sleep.nightmaresN)],
           ]} />
         </Section>
@@ -133,6 +145,7 @@ export default function ClinicianReport({ report }) {
         <Section title="Body">
           <Rows rows={[
             ["Pain getting in the way", body.painStop.n ? `slowed or stopped activity on ${body.painSlowedOrStopped} of ${body.painStop.n} days; stopped activity on ${body.painStopped}` : "no data"],
+            body.painBaselineDays ? ["Pain worse than their usual", `${body.painWorseThanUsual} of ${body.painBaselineDays} days`] : null,
             body.painLegacy.n ? ["Pain level (older 0–4 scale)", statLine(body.painLegacy)] : null,
             ["Hard-to-ignore symptoms", body.symptomHardDays.map((s) => `${s.label} ${s.hard}/${s.n}`).join(" · ")],
             ["POTS symptoms", body.potsN ? `${body.potsDays} of ${body.potsN} days (dizzy ${body.dizzy}, palpitations ${body.palpitations}, fainting ${body.fainting}); worse standing ${body.worseStanding}` : "not logged"],
@@ -165,6 +178,19 @@ export default function ClinicianReport({ report }) {
           ]} />
         </Section>
 
+        {r.helped.any ? (
+          <Section title="What helped (self-reported)">
+            <Rows rows={[
+              r.helped.afterLimit.length || r.helped.limitNothing ? ["Coming down after a meltdown/shutdown", `${list(r.helped.afterLimit, 6)}${r.helped.limitNothing ? ` · nothing yet: ${r.helped.limitNothing}×` : ""}`] : null,
+              r.helped.body.length || r.helped.bodyNothing ? ["Body, on rough symptom days", `${list(r.helped.body, 6)}${r.helped.bodyNothing ? ` · nothing worked: ${r.helped.bodyNothing}×` : ""}`] : null,
+              r.helped.doing.length ? ["Tried when mood was low or pain in the way", list(r.helped.doing, 6)] : null,
+              r.helped.followUps.length ? ["…helped by next check-in? (yes / a bit / no / worse)", r.helped.followUps.slice(0, 6).map((f) => `${f.label} ${f.yes}/${f.bit}/${f.no}/${f.worse}`).join(" · ")] : null,
+              r.helped.sleep.length ? ["Before good nights", list(r.helped.sleep, 6)] : null,
+              r.helped.today.length ? ["Helped today (general)", list(r.helped.today, 6)] : null,
+            ]} />
+          </Section>
+        ) : null}
+
         <Section title="Medications and substances">
           <Rows rows={[
             ...meds.perMed.filter((m) => m.n).map((m) => [`${m.name}${m.dose ? ` ${m.dose}` : ""}${m.stopped ? " (stopped)" : ""}`, `on time ${m.onTime}, late ${m.late}, missed ${m.missed} (n=${m.n})`]),
@@ -190,6 +216,17 @@ export default function ClinicianReport({ report }) {
                 </tbody>
               </table>
             ) : <p className="rr-muted">{cycle.cycles} cycle start{cycle.cycles === 1 ? "" : "s"} logged; comparison shown after 2.</p>}
+          </Section>
+        )}
+
+        {r.lookbacks.length > 0 && (
+          <Section title="Weekly look-backs (hindsight)">
+            <table className="rr-grid">
+              <thead><tr><th>Week</th><th>Overall</th><th>Looks different now?</th></tr></thead>
+              <tbody>
+                {r.lookbacks.map((l) => <tr key={l.date}><td>{l.week}</td><td>{l.overall || "—"}</td><td>{l.hindsight || "—"}</td></tr>)}
+              </tbody>
+            </table>
           </Section>
         )}
 
@@ -222,18 +259,19 @@ export default function ClinicianReport({ report }) {
         <Section title="What the scales mean">
           <Rows rows={[
             ["Mood (check-in, averaged per day)", MOOD_OPTIONS.map((o) => `${o.score} ${o.label}`).join(" · ")],
-            ["Activation (two-direction)", ACTIVATION_OPTIONS.map((o) => `${o.score} ${o.label}`).join(" · ")],
+            ["Mind speed (two-direction)", ACTIVATION_OPTIONS.map((o) => `${o.score} ${o.label}`).join(" · ")],
+            ["Body energy (two-direction)", `${BODY_OPTIONS.map((o) => `${o.score} ${o.label}`).join(" · ")}. Asked separately from mind because EDS/POTS can make the body heavy regardless of mood.`],
             ["Pain getting in the way (daily max)", PAIN_STOP_OPTIONS.map((o) => `${o.score} ${o.label}`).join(" · ")],
             ["Sleep hours (answer ranges, plotted at midpoint)", "Under 4 → 3.5 · 4–6 → 5 · 6–8 → 7 · 8–10 → 9 · Over 10 → 10.5"],
             ["Body symptom severity", "Didn't notice · Noticed, could ignore · Hard to ignore · Couldn't do things"],
-            ["Every question", "Has a \"Don't know\" option, counted separately from skipped. Questions use concrete, observable wording because the patient may find naming feelings or body signals difficult."],
+            ["Every question", "Has a \"Don't know\" option, counted separately from skipped. Questions use concrete, everyday wording on purpose: the patient may find naming feelings or body signals difficult, and asked for questions that don't reveal what they screen for, to avoid second-guessing answers. Clinical meaning is mapped in this report."],
           ]} />
         </Section>
 
         <Section title="Day by day">
           <table className="rr-grid rr-daily">
             <thead>
-              <tr><th>Date</th><th>Mood avg (low–high)</th><th>Activ.</th><th>Sleep h</th><th>Pain</th><th>Melt/shut</th><th>POTS</th><th>Missed med</th><th>Other</th></tr>
+              <tr><th>Date</th><th>Mood avg (low–high)</th><th>Mind</th><th>Body</th><th>Sleep h</th><th>Pain</th><th>Melt/shut</th><th>POTS</th><th>Missed med</th><th>Other</th></tr>
             </thead>
             <tbody>
               {r.days.filter((d) => d.logged || d.mood != null).map((d) => (
@@ -241,12 +279,13 @@ export default function ClinicianReport({ report }) {
                   <td>{shortDate(d.date)}</td>
                   <td>{fmt(d.mood)}{d.moodSwing != null ? ` (${fmt(d.moodMin, 0)}–${fmt(d.moodMax, 0)})` : ""}</td>
                   <td>{fmt(d.activation)}</td>
+                  <td>{fmt(d.body)}</td>
                   <td>{d.sleepHours ?? "—"}</td>
                   <td>{d.painStop != null ? fmt(d.painStop, 0) : d.painLegacy != null ? `${d.painLegacy}*` : "—"}</td>
                   <td>{d.meltdown && d.shutdown ? "both" : d.meltdown ? "melt" : d.shutdown ? "shut" : d.meltdownOrShutdown === false ? "no" : "—"}</td>
                   <td>{d.potsAny == null ? "—" : d.potsAny ? "yes" : "no"}</td>
                   <td>{d.medsMissed == null ? "—" : d.medsMissed ? "yes" : "no"}</td>
-                  <td>{[d.period && "period", d.flare && "flare", d.shortNotTired && "short sleep, not tired", d.safety && d.safety !== "no" && "safety", d.backfilled && "from memory"].filter(Boolean).join(", ")}</td>
+                  <td>{[d.period && "period", d.flare && "flare", d.shortNotTired && "short sleep, not tired", d.safety && d.safety !== "no" && "safety", d.sick && "sick/injured", d.mode === "bare" && "bare min.", d.mode === "good" && "quick log", d.backfilled && "from memory"].filter(Boolean).join(", ")}</td>
                 </tr>
               ))}
             </tbody>
@@ -255,7 +294,9 @@ export default function ClinicianReport({ report }) {
         </Section>
 
         <Section title="Data quality">
-          <p>Coverage {pct(r.logged, r.totalDays)} ({r.logged}/{r.totalDays} days). {r.backfilled} days filled in later from memory. Missing days are not random — people often skip their hardest days.</p>
+          {r.bareDays.length > 0 && <p>Bare-minimum days (patient chose the 4-question log, often on harder days): {r.bareDays.map(shortDate).join(", ")}.</p>}
+          {r.hiddenList.length > 0 && <p>Turned off by the patient (not asked at the time of this report): {r.hiddenList.join("; ")}.</p>}
+          <p>Coverage {pct(r.logged, r.totalDays)} ({r.logged}/{r.totalDays} days). {r.backfilled} day{r.backfilled === 1 ? "" : "s"} filled in later from memory. Missing days are not random — people often skip their hardest days.</p>
           {r.dkRows.length > 0 && (
             <table className="rr-grid">
               <thead><tr><th>Question</th><th>Times shown</th><th>Don't know</th><th>Skipped</th></tr></thead>

@@ -20,11 +20,11 @@ export const BACKFILL_QUESTIONS = [
     section: "mood",
     field: "recallActivation",
     type: "emoji5",
-    prompt: "Which was closest that day?",
+    prompt: "How did your body feel that day?",
     options: [
       { emoji: "🛌", label: "Stay in bed" },
       { emoji: "🐢", label: "Slow" },
-      { emoji: "🙂", label: "Normal" },
+      { emoji: "🙂", label: "My usual" },
       { emoji: "⚡", label: "Lots of energy" },
       { emoji: "🌪️", label: "Couldn't sit still" },
     ],

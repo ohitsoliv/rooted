@@ -6,7 +6,8 @@ import { useState, useMemo } from "react";
 import BottomNav from "../components/BottomNav";
 import MonthSwitcher from "../components/MonthSwitcher";
 import { useNavigate } from "react-router-dom";
-import { normalizeDay, checkinList } from "../analysis/normalize";
+import { normalizeDay } from "../analysis/normalize";
+import { coreFeelings } from "../feelings";
 import { findPatterns, sentence, MIN_N } from "../analysis/patterns";
 
 const playTap = () => {
@@ -140,7 +141,8 @@ export default function Summary({ logs = [], loading = false, year, month, onMon
   const emotionCounts = useMemo(() => {
     const counts = {};
     logs.forEach((l) => {
-      const emotions = [l.mood?.emotion, ...checkinList(l).map((c) => c.emotion)].filter(Boolean);
+      // Main feeling categories only — specific words are too scattered to count
+      const emotions = [...coreFeelings({ emotionPath: l.mood?.emotionPath }), ...normalizeDay(l).feelingCores];
       emotions.forEach((emotion) => {
         counts[emotion] = (counts[emotion] || 0) + 1;
       });
@@ -271,8 +273,8 @@ export default function Summary({ logs = [], loading = false, year, month, onMon
             color="terra"
           />
           <StatCard
-            label="Activation"
-            value={avgEnergy != null ? ["🛌", "🐢", "🙂", "⚡", "🌪️"][Math.round(avgEnergy)] : "—"}
+            label="Mind speed"
+            value={avgEnergy != null ? ["🌫️", "🐌", "🙂", "💭", "🌪️"][Math.round(avgEnergy)] : "—"}
             sub={avgEnergy != null ? `${fmt(avgEnergy)} · 2 = normal` : "no data"}
             color="gold"
           />

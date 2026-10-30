@@ -5,9 +5,10 @@ import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import BottomNav from "../components/BottomNav";
 import MonthSwitcher from "../components/MonthSwitcher";
-import { dateKey } from "../firebase";
+import { logDayKey } from "../firebase";
 import { normalizeDay, checkinList } from "../analysis/normalize";
 import { SECTIONS, CHECKIN_QUESTIONS, isAnswered, labelOf } from "../questions";
+import { describeFeeling } from "../feelings";
 
 const MOOD_EMOJIS = ["😢", "😕", "😐", "🙂", "😊"];
 const PAIN_EMOJIS = ["😌", "🤏", "😐", "😣", "😫"];
@@ -502,7 +503,7 @@ export default function History({ logs = [], loading = false, year, month, onMon
                 No log for this day — and that's okay 🌿
               </p>
             )}
-            {selectedDateKey && selectedDateKey < dateKey() && (
+            {selectedDateKey && selectedDateKey < logDayKey() && (
               <button
                 type="button"
                 onClick={() => navigate(`/log/${selectedDateKey}`)}
@@ -681,7 +682,7 @@ function AnswerList({ log }) {
   cis.forEach((ci, i) => {
     const rows = CHECKIN_QUESTIONS.filter((q) => isAnswered(ci[q.id]))
       .map((q) => [q.prompt, q.options ? labelOf(q, ci[q.id]) : String(ci[q.id])]);
-    if (ci.emotion) rows.push(["Feeling", ci.emotion]);
+    if (describeFeeling(ci)) rows.push(["Feeling", describeFeeling(ci)]);
     if (rows.length) {
       const time = ci.timestamp ? new Date(ci.timestamp).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : `#${i + 1}`;
       groups.push({ title: `📝 Check-in ${time}`, rows });

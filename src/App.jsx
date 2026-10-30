@@ -6,9 +6,10 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import useAuth from "./hooks/useAuth";
 import useLog from "./hooks/useLog";
 import useLogs from "./hooks/useLogs";
-import { dateKey, saveLog } from "./firebase";
+import { logDayKey, saveLog } from "./firebase";
 import useProfile from "./profile";
 import SafetySupport from "./components/SafetySupport";
+import SyncBanner from "./components/SyncBanner";
 
 const Home = lazy(() => import("./pages/Home"));
 const Log = lazy(() => import("./pages/Log"));
@@ -19,6 +20,7 @@ const PastLog = lazy(() => import("./pages/PastLog"));
 const Login = lazy(() => import("./pages/Login"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Screeners = lazy(() => import("./pages/Screeners"));
+const Lookback = lazy(() => import("./pages/Lookback"));
 
 /** Get the first and last day of a month as YYYY-MM-DD strings. */
 function getMonthRange(year, month) {
@@ -39,10 +41,12 @@ export default function App() {
   } = useAuth();
 
   // Today's log
-  const today = dateKey();
+  const today = logDayKey();
   const {
     log,
     updateField,
+    updateSection,
+    reload: reloadLog,
     saveSection,
     completedSections,
   } = useLog(user?.uid, today);
@@ -76,23 +80,27 @@ export default function App() {
     });
   }, []);
 
-  // Good Enough Mode — persisted in localStorage
-  const [goodEnough, setGoodEnough] = useState(() => {
+  // Logging mode: "full" | "good" | "bare". Picked on Home for today only;
+  // each new day starts from the default chosen in Settings.
+  const [modeChoice, setModeChoice] = useState(() => {
     try {
-      return localStorage.getItem("rooted_goodEnough") === "true";
+      return JSON.parse(localStorage.getItem("rooted_mode") || "null");
     } catch {
-      return false;
+      return null;
     }
   });
+  const mode = modeChoice?.day === today ? modeChoice.mode : profile.defaultMode || "full";
+  const goodEnough = mode === "good" || mode === "bare";
 
-  const handleGoodEnoughToggle = useCallback((val) => {
-    setGoodEnough(val);
+  const handleModeChange = useCallback((m) => {
+    const next = { day: today, mode: m };
+    setModeChoice(next);
     try {
-      localStorage.setItem("rooted_goodEnough", String(val));
+      localStorage.setItem("rooted_mode", JSON.stringify(next));
     } catch {
-      return;
+      // per-browser convenience only
     }
-  }, []);
+  }, [today]);
 
   // Compute logged days for Garden
   const loggedDays = useMemo(() => {
@@ -121,10 +129,46 @@ export default function App() {
   const handleSaveSection = useCallback(async (sectionName) => {
     const ok = await saveSection(sectionName);
     if (ok) {
+      // Record a shortened day so the report doesn't count unasked questions as skipped
+      if (mode !== "full" && userId) await saveLog(userId, today, { mode });
       refetchMonthLogs();
     }
     return ok;
-  }, [saveSection, refetchMonthLogs]);
+  }, [saveSection, refetchMonthLogs, mode, userId, today]);
+
+  // Bare minimum: one screen, saved straight into the normal sections
+  const handleBareSave = useCallback(async ({ mood, body, mind, sleepHours, meds }) => {
+    if (!userId) return false;
+    const cis = Array.isArray(log.checkins) ? log.checkins : log.checkins?.checkins || [];
+    const ci = { timestamp: new Date().toISOString(), bare: true };
+    if (mood) ci.mood = mood;
+    if (body) ci.body = body;
+    if (mind) ci.activation = mind;
+    const payload = { mode: "bare" };
+    const done = new Set(log.completedSections || []);
+    if (mood || body || mind) {
+      payload.checkins = { checkins: [...cis, ci] };
+      done.add("checkins");
+    }
+    if (sleepHours) {
+      payload.sleep = { ...(log.sleep || {}), sleepHours };
+      done.add("sleep");
+    }
+    if (meds) {
+      payload.nutrition = { ...(log.nutrition || {}), meds: { ...(log.nutrition?.meds || {}), _all: meds } };
+      done.add("nutrition");
+    }
+    payload.completedSections = [...done];
+    const result = await saveLog(userId, today, payload);
+    if (result.ok) {
+      Object.entries(payload).forEach(([k, v]) => {
+        if (k !== "completedSections" && k !== "mode") updateSection(k, v);
+      });
+      refetchMonthLogs();
+      reloadLog();
+    }
+    return result.ok;
+  }, [userId, log, today, updateSection, refetchMonthLogs, reloadLog]);
 
   // --- Auth loading screen ---
   if (authLoading) {
@@ -150,6 +194,7 @@ export default function App() {
   // --- Signed in ---
   return (
     <BrowserRouter>
+      <SyncBanner user={user} />
       <Suspense fallback={null}>
         <Routes>
           <Route
@@ -160,10 +205,12 @@ export default function App() {
                 log={log}
                 completedSections={completedSections}
                 loggedDays={loggedDays}
-                goodEnough={goodEnough}
-                onGoodEnoughToggle={handleGoodEnoughToggle}
+                mode={mode}
+                onModeChange={handleModeChange}
+                onBareSave={handleBareSave}
                 onLogout={logout}
                 profile={profile}
+                onUpdateProfile={updateProfile}
               />
             }
           />
@@ -223,6 +270,10 @@ export default function App() {
                 profile={profile}
               />
             }
+          />
+          <Route
+            path="/lookback"
+            element={<Lookback user={user} onDone={async (day) => { await updateProfile({ lastLookback: day }); refetchMonthLogs(); }} />}
           />
           <Route path="/settings" element={<Settings profile={profile} onUpdate={updateProfile} />} />
           <Route

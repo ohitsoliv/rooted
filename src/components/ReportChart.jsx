@@ -8,7 +8,7 @@ const W = 720;
 const PAD_L = 34;
 const PAD_R = 10;
 const TOP = 26; // mood panel top
-const MOOD_H = 100;
+const MOOD_H = 90;
 const GAP = 18;
 const SLEEP_H = 40;
 const H = TOP + MOOD_H + GAP + SLEEP_H + 22;
@@ -43,11 +43,12 @@ export default function ReportChart({ report }) {
   const flare = set(events.flare);
   const medChange = set(events.medChange);
   const big = set(events.bigEvent);
+  const sick = set(events.sick || []);
   const labelEvery = totalDays > 60 ? 14 : totalDays > 21 ? 7 : 2;
 
   return (
     <figure style={{ margin: 0 }}>
-      <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="Daily mood, activation, and sleep over the report period" style={{ display: "block" }}>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="Daily mood, mind speed, body energy, and sleep over the report period" style={{ display: "block" }}>
         <defs>
           <pattern id="hatch" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
             <line x1="0" y1="0" x2="0" y2="4" stroke="#bbb" strokeWidth="1.2" />
@@ -66,7 +67,7 @@ export default function ReportChart({ report }) {
             <text x={PAD_L - 6} y={yMood(v) + 3} fontSize="9" textAnchor="end" fill="#444">{v}</text>
           </g>
         ))}
-        <text x={4} y={TOP - 10} fontSize="9" fill="#222" fontWeight="700">Mood / activation (0–4)</text>
+        <text x={4} y={TOP - 10} fontSize="9" fill="#222" fontWeight="700">Mood · mind · body (0–4)</text>
 
         {/* Med change lines */}
         {dates.map((d, i) => medChange.has(d) && (
@@ -81,6 +82,9 @@ export default function ReportChart({ report }) {
         })}
 
         {/* Activation: dashed */}
+        {segments("body").map((seg, k) => (
+          <polyline key={`bo${k}`} points={seg.map((p) => p.join(",")).join(" ")} fill="none" stroke="#777" strokeWidth="1.3" strokeDasharray="1 2.5" strokeLinecap="round" />
+        ))}
         {segments("activation").map((seg, k) => (
           <polyline key={`a${k}`} points={seg.map((p) => p.join(",")).join(" ")} fill="none" stroke="#555" strokeWidth="1.4" strokeDasharray="4 3" />
         ))}
@@ -97,6 +101,7 @@ export default function ReportChart({ report }) {
           <g key={`k${d}`}>
             {melt.has(d) && <path d={`M${x(i)},${TOP - 9} l4,7 h-8 z`} fill="#000" />}
             {flare.has(d) && <path d={`M${x(i)},${TOP - 2} l3.5,-4 l-3.5,-4 l-3.5,4 z`} fill="none" stroke="#000" strokeWidth="1.1" transform={`translate(${melt.has(d) ? 9 : 0},0)`} />}
+            {sick.has(d) && <rect x={x(i) - step / 2} width={step} y={sleepTop + SLEEP_H + 12} height={3.5} fill="#000" />}
             {big.has(d) && <circle cx={x(i)} cy={sleepTop + SLEEP_H + 8} r="2.4" fill="none" stroke="#000" />}
           </g>
         ))}
@@ -123,11 +128,12 @@ export default function ReportChart({ report }) {
       <figcaption style={{ display: "flex", flexWrap: "wrap", gap: "4px 14px", fontSize: "9pt", color: "#333", marginTop: "4px" }}>
         <span>━ ● mood (daily average)</span>
         <span>▮ gray band: lowest–highest check-in that day</span>
-        <span>╌ activation (2 = normal)</span>
+        <span>╌ mind speed · ┈ body energy (2 = their usual)</span>
         <span>▲ meltdown/shutdown</span>
         <span>◇ EDS flare</span>
         <span>┊ medication change</span>
         <span>○ big event</span>
+        <span>▬ sick/injured (strip under sleep)</span>
         <span>▨ period</span>
         <span>black sleep bar = under 6 h</span>
         <span>gaps = no data</span>

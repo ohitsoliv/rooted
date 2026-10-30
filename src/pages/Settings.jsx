@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import BottomNav from "../components/BottomNav";
 import { dateKey } from "../firebase";
+import { SECTIONS, CHECKIN_QUESTIONS, LOCKED_SECTIONS } from "../questions";
 
 const font = "'Nunito', sans-serif";
 const card = { background: "var(--white)", borderRadius: "20px", border: "1.5px solid var(--tan-light)", padding: "18px", display: "flex", flexDirection: "column", gap: "12px" };
@@ -76,6 +77,89 @@ function AddMed({ onAdd }) {
   );
 }
 
+function QuestionChooser({ hidden = [], onChange }) {
+  const [open, setOpen] = useState(null);
+  const set = new Set(hidden);
+  const toggle = (key) => {
+    const next = new Set(set);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    onChange([...next]);
+  };
+  const groups = SECTIONS.map((s) => ({
+    id: s.id,
+    label: `${s.emoji} ${s.label}`,
+    locked: LOCKED_SECTIONS.includes(s.id),
+    keyPrefix: s.id === "checkins" ? "checkin" : s.id,
+    questions: s.id === "checkins" ? CHECKIN_QUESTIONS : s.questions || [],
+  }));
+  const row = { display: "flex", gap: "10px", alignItems: "flex-start", fontFamily: font, fontSize: "13px", color: "var(--brown)" };
+  return (
+    <section style={card}>
+      <h2 style={h2}>Choose your questions</h2>
+      <p style={sub}>Turn off anything you don't want to see. Nothing is deleted, and you can turn it back on any time. The report notes which questions were off.</p>
+      {groups.map((g) => {
+        const sectionOn = g.locked || !set.has(g.id);
+        const offCount = g.questions.filter((q) => set.has(`${g.keyPrefix}.${q.id}`)).length;
+        return (
+          <div key={g.id} style={{ borderTop: "1px solid var(--tan-light)", paddingTop: "10px", display: "flex", flexDirection: "column", gap: "8px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
+              <label style={{ ...row, fontWeight: 700, alignItems: "center" }}>
+                <input type="checkbox" checked={sectionOn} disabled={g.locked} onChange={() => toggle(g.id)} />
+                {g.label}
+              </label>
+              {sectionOn && g.questions.length > 0 && (
+                <button type="button" onClick={() => setOpen(open === g.id ? null : g.id)} style={{ background: "none", border: "none", fontFamily: font, fontSize: "12px", fontWeight: 700, color: "var(--mauve-dark)", cursor: "pointer" }}>
+                  {open === g.id ? "Done" : `Questions${offCount ? ` (${offCount} off)` : ""} ›`}
+                </button>
+              )}
+            </div>
+            {open === g.id && sectionOn && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px", paddingLeft: "24px" }}>
+                {g.questions.map((q) => {
+                  const key = `${g.keyPrefix}.${q.id}`;
+                  return (
+                    <label key={key} style={row}>
+                      <input type="checkbox" checked={q.safety || !set.has(key)} disabled={q.safety} onChange={() => toggle(key)} />
+                      <span>{q.prompt}{q.safety ? " (always asked)" : ""}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
+function ReferencePeriod({ value, onSave }) {
+  const [start, setStart] = useState(value?.start || "");
+  const [end, setEnd] = useState(value?.end || "");
+  const days = start && end ? Math.round((new Date(`${end}T12:00:00`) - new Date(`${start}T12:00:00`)) / 86400000) + 1 : 0;
+  const valid = days >= 14 && end <= dateKey();
+  return (
+    <section style={card}>
+      <h2 style={h2}>Okay-period reference</h2>
+      <p style={sub}>
+        Pick 2+ weeks (already logged) that felt like your usual — not great, not bad. Reports compare against it, so a long low or high stretch can't slowly become the new "usual."
+      </p>
+      <div style={{ display: "flex", gap: "8px", alignItems: "center", fontFamily: font, fontSize: "13px" }}>
+        <input type="date" value={start} max={end || dateKey()} onChange={(e) => setStart(e.target.value)} style={{ ...input, width: "auto" }} aria-label="Okay period start" />
+        to
+        <input type="date" value={end} min={start} max={dateKey()} onChange={(e) => setEnd(e.target.value)} style={{ ...input, width: "auto" }} aria-label="Okay period end" />
+      </div>
+      {start && end && !valid && <p style={{ ...sub, color: "var(--terra-dark)" }}>Pick at least 14 days, ending today or earlier.</p>}
+      <div style={{ display: "flex", gap: "8px" }}>
+        <button type="button" style={btn(true)} disabled={!valid} onClick={() => onSave({ start, end })}>Save</button>
+        {value?.start && <button type="button" style={btn(false)} onClick={() => { setStart(""); setEnd(""); onSave(null); }}>Clear</button>}
+      </div>
+      {value?.start && <p style={sub}>Current: {value.start} to {value.end}. You can change it any time — for example after a med change settles.</p>}
+    </section>
+  );
+}
+
 export default function Settings({ profile, onUpdate }) {
   const navigate = useNavigate();
   const meds = profile.meds || [];
@@ -97,6 +181,26 @@ export default function Settings({ profile, onUpdate }) {
           ))}
           <AddMed onAdd={(m) => onUpdate({ meds: [...meds, m] })} />
         </section>
+
+        <section style={card}>
+          <h2 style={h2}>Default logging mode</h2>
+          <p style={sub}>What each day starts in. You can still switch on the Home screen; it goes back to this the next morning.</p>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            {[["full", "Full"], ["good", "Good Enough"], ["bare", "Bare minimum"]].map(([id, label]) => {
+              const sel = (profile.defaultMode || "full") === id;
+              return (
+                <button key={id} type="button" aria-pressed={sel} onClick={() => onUpdate({ defaultMode: id })}
+                  style={{ fontFamily: font, fontSize: "13px", fontWeight: sel ? 800 : 600, padding: "8px 13px", borderRadius: "999px", cursor: "pointer", color: sel ? "var(--sage-dark)" : "var(--brown)", background: sel ? "color-mix(in srgb, var(--sage) 12%, var(--white))" : "var(--white)", border: sel ? "2px solid var(--sage)" : "1.5px solid var(--tan-light)" }}>
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        <QuestionChooser hidden={profile.hidden} onChange={(hidden) => onUpdate({ hidden })} />
+
+        <ReferencePeriod value={profile.reference} onSave={(reference) => onUpdate({ reference })} />
 
         <section style={card}>
           <h2 style={h2}>Period tracking</h2>

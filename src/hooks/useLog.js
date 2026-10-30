@@ -2,7 +2,7 @@
 // Custom hook: read & write a single day's log (users/{uid}/logs/{YYYY-MM-DD})
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { fetchLog, saveLog, dateKey } from "../firebase";
+import { fetchLog, saveLog, logDayKey } from "../firebase";
 
 /**
  * useLog(userId, date?)
@@ -20,12 +20,15 @@ import { fetchLog, saveLog, dateKey } from "../firebase";
  *   completedSections — array of section names that have been saved
  */
 export default function useLog(userId, date) {
-  const today = date || dateKey();
+  const today = date || logDayKey();
   const requestKey = userId ? `${userId}_${today}` : "";
   const [log, setLog] = useState({});
   const [resolvedKey, setResolvedKey] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  const [version, setVersion] = useState(0);
+  /** Re-read this day from storage (after a save made outside this hook). */
+  const reload = useCallback(() => setVersion((v) => v + 1), []);
 
   // Track which version of userId+date we're on to avoid stale writes
   const keyRef = useRef("");
@@ -58,7 +61,7 @@ export default function useLog(userId, date) {
           setResolvedKey(key);
         }
       });
-  }, [requestKey, today, userId]);
+  }, [requestKey, today, userId, version]);
 
   // --- Local state helpers (instant, no network) ---
 
@@ -130,7 +133,8 @@ export default function useLog(userId, date) {
           completedSections: updatedCompleted,
         };
 
-        await saveLog(userId, today, payload);
+        const result = await saveLog(userId, today, payload);
+        if (!result.ok) throw new Error("Couldn't save — your device storage may be full.");
 
         // Update local state with new completedSections
         const next = {
@@ -164,5 +168,6 @@ export default function useLog(userId, date) {
     saveSection,
     resetSection,
     completedSections,
+    reload,
   };
 }

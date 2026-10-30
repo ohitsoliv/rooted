@@ -4,10 +4,11 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import BottomNav from "../components/BottomNav";
 import ClinicianReport from "../components/ClinicianReport";
-import { fetchLogRange, dateKey } from "../firebase";
+import { fetchLogRange, logDayKey } from "../firebase";
 import { buildReport, noteKey, shortDate } from "../analysis/report";
 import { normalizeDay, checkinList } from "../analysis/normalize";
 import { CHECKIN_QUESTIONS, SECTIONS, labelOf } from "../questions";
+import { describeFeeling } from "../feelings";
 import { addDays } from "../analysis/patterns";
 import { playTap } from "../utils";
 
@@ -40,11 +41,11 @@ const toCsv = (rows) => rows.map((r) => r.map(csvCell).join(",")).join("\n");
 function daysCsv(logs, { includeNotes, includeSubstances }) {
   const qs = SECTIONS.flatMap((s) => (s.questions || []).map((q) => ({ s, q })))
     .filter(({ q }) => q.type !== "meds" && (includeNotes || q.type !== "text") && (includeSubstances || !q.private));
-  const head = ["date", "from_memory", "checkins", "mood_avg_0_4", "mood_low", "mood_high", "activation_avg_0_4", "pain_in_way_max_0_4", "sleep_hours_mid", "meds_missed", "pots_any", "eds_flare", "heart_rate_max",
+  const head = ["date", "from_memory", "checkins", "mood_avg_0_4", "mood_low", "mood_high", "mind_speed_avg_0_4", "body_energy_avg_0_4", "low_mood_mind_racing", "pain_in_way_max_0_4", "sleep_hours_mid", "meds_missed", "pots_any", "eds_flare", "heart_rate_max",
     ...qs.map(({ s, q }) => `${s.id}.${q.id}`)];
   const rows = logs.map((log) => {
     const d = normalizeDay(log);
-    return [d.date, d.backfilled ? "yes" : "", d.checkinCount, d.mood?.toFixed(2), d.moodMin, d.moodMax, d.activation?.toFixed(2), d.painStop, d.sleepHours, d.medsMissed, d.potsAny, d.flare, d.hrMax,
+    return [d.date, d.backfilled ? "yes" : "", d.checkinCount, d.mood?.toFixed(2), d.moodMin, d.moodMax, d.activation?.toFixed(2), d.body?.toFixed(2), d.mismatch, d.painStop, d.sleepHours, d.medsMissed, d.potsAny, d.flare, d.hrMax,
       ...qs.map(({ s, q }) => labelOf(q, log[s.id]?.[q.id]))];
   });
   return toCsv([head, ...rows]);
@@ -52,11 +53,12 @@ function daysCsv(logs, { includeNotes, includeSubstances }) {
 
 function checkinsCsv(logs, { includeNotes }) {
   const qs = CHECKIN_QUESTIONS.filter((q) => includeNotes || q.type !== "text");
-  const head = ["date", "time", ...qs.map((q) => q.id), "legacy_mood_0_4", "legacy_energy_0_4", "legacy_pain_0_4"];
+  const head = ["date", "time", ...qs.map((q) => q.id), "feeling", "legacy_mood_0_4", "legacy_energy_0_4", "legacy_pain_0_4"];
   const rows = logs.flatMap((log) => checkinList(log).map((ci) => [
     log.date,
     ci.timestamp ? new Date(ci.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "",
     ...qs.map((q) => (q.options ? labelOf(q, ci[q.id]) : ci[q.id])),
+    describeFeeling(ci),
     typeof ci.mood === "number" ? ci.mood : "",
     typeof ci.energy === "number" ? ci.energy : "",
     typeof ci.pain === "number" ? ci.pain : "",
@@ -87,7 +89,7 @@ const pill = (sel) => ({ fontFamily: font, fontSize: "13px", fontWeight: sel ? 7
 const dateInput = { fontFamily: font, fontSize: "14px", padding: "7px 9px", border: "1.5px solid var(--tan)", borderRadius: "10px", background: "var(--white)", color: "var(--brown)" };
 
 export default function Export({ onRestore, user, profile }) {
-  const today = dateKey();
+  const today = logDayKey();
   const [range, setRange] = useState(30);
   const [custom, setCustom] = useState({ start: addDays(today, -29), end: today });
   const start = range === "custom" ? custom.start : addDays(today, -(range - 1));
@@ -105,7 +107,10 @@ export default function Export({ onRestore, user, profile }) {
     let alive = true;
     if (!user?.uid || !start || !end || start > end) return undefined;
     setLoading(true);
-    fetchLogRange(user.uid, start, end).then((data) => {
+    // 28 extra days before the range feed the personal baseline
+    const refStart = profile?.reference?.start;
+    const from = refStart && refStart < addDays(start, -28) ? refStart : addDays(start, -28);
+    fetchLogRange(user.uid, from, end).then((data) => {
       if (alive) {
         setLogs(data);
         setLoading(false);
@@ -114,7 +119,7 @@ export default function Export({ onRestore, user, profile }) {
     return () => {
       alive = false;
     };
-  }, [user?.uid, start, end]);
+  }, [user?.uid, start, end, profile?.reference?.start]);
 
   const report = useMemo(
     () => buildReport(logs, profile, { start, end, noteKeys, includeSubstances }),
@@ -217,8 +222,8 @@ export default function Export({ onRestore, user, profile }) {
             Include typed notes
           </label>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-            <Button label="Daily CSV" disabled={loading} onClick={() => downloadFile(daysCsv(logs, { includeNotes: includeNotesCsv, includeSubstances }), `rooted-days-${start}-to-${end}.csv`, "text/csv")} />
-            <Button label="Check-ins CSV" disabled={loading} onClick={() => downloadFile(checkinsCsv(logs, { includeNotes: includeNotesCsv }), `rooted-checkins-${start}-to-${end}.csv`, "text/csv")} />
+            <Button label="Daily CSV" disabled={loading} onClick={() => downloadFile(daysCsv(logs.filter((l) => l.date >= start), { includeNotes: includeNotesCsv, includeSubstances }), `rooted-days-${start}-to-${end}.csv`, "text/csv")} />
+            <Button label="Check-ins CSV" disabled={loading} onClick={() => downloadFile(checkinsCsv(logs.filter((l) => l.date >= start), { includeNotes: includeNotesCsv }), `rooted-checkins-${start}-to-${end}.csv`, "text/csv")} />
           </div>
         </Card>
 

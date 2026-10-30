@@ -19,7 +19,7 @@ export default function QuestionSection({
   onSafety,
 }) {
   const color = section.color;
-  const visible = section.questions.filter((q) => isVisible(q, data, profile, goodEnough));
+  const visible = section.questions.filter((q) => isVisible(q, data, profile, goodEnough, section.id));
 
   const handleChange = useCallback(
     (q, value) => {

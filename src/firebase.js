@@ -75,12 +75,52 @@ function readLocalLogs(userId) {
 }
 
 function writeLocalLogs(userId, logsByDate) {
-  if (typeof window === "undefined" || !userId) return;
+  if (typeof window === "undefined" || !userId) return false;
   try {
     window.localStorage.setItem(localCacheKey(userId), JSON.stringify(logsByDate));
+    return true;
   } catch {
-    return;
+    return false;
   }
+}
+
+/* ---- Unsynced days: saved on this device, not yet in Firestore ---- */
+
+const pendingKey = (userId) => `rooted_pending_${userId}`;
+
+export function getPending(userId) {
+  try {
+    return JSON.parse(window.localStorage.getItem(pendingKey(userId)) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function setPending(userId, list) {
+  try {
+    window.localStorage.setItem(pendingKey(userId), JSON.stringify([...new Set(list)]));
+  } catch {
+    // nothing else we can do; the banner will still show from memory
+  }
+  window.dispatchEvent(new CustomEvent("rooted-sync", { detail: { pending: list.length } }));
+}
+
+/** Push every unsynced day to Firestore. Returns the number still pending. */
+export async function syncPending(userId) {
+  if (!userId || isLocalOnlyUser(userId)) return 0;
+  const pending = getPending(userId);
+  if (!pending.length) return 0;
+  const local = readLocalLogs(userId);
+  const still = [];
+  for (const dayKey of pending) {
+    try {
+      await setDoc(doc(db, "users", userId, "logs", dayKey), local[dayKey] || {}, { merge: true });
+    } catch {
+      still.push(dayKey);
+    }
+  }
+  setPending(userId, still);
+  return still.length;
 }
 
 export { onAuthStateChanged };
@@ -88,6 +128,13 @@ export { onAuthStateChanged };
 export const signInWithGoogle = () => signInWithPopup(auth, googleProvider);
 
 export const logOut = () => signOut(auth);
+
+/**
+ * The day a log entry belongs to. Anything before 4 a.m. counts as the
+ * previous day, so a 1 a.m. entry about "today" doesn't land on tomorrow.
+ */
+export const DAY_ROLLOVER_HOUR = 4;
+export const logDayKey = (now = new Date()) => dateKey(new Date(now.getTime() - DAY_ROLLOVER_HOUR * 3600000));
 
 export const dateKey = (date = new Date()) => {
   const year = date.getFullYear();
@@ -125,25 +172,34 @@ export async function fetchLog(userId, dayKey) {
   return local[dayKey] || {};
 }
 
+/**
+ * Saves locally first, then to Firestore.
+ * Returns { ok, cloud }:
+ *   ok    — false only if it could not be saved anywhere
+ *   cloud — true if it reached Firestore (false = saved on this device only,
+ *           queued for retry; also false for guest mode)
+ */
 export async function saveLog(userId, dayKey, payload) {
-  if (!userId || !dayKey) return;
+  if (!userId || !dayKey) return { ok: false, cloud: false };
 
   const local = readLocalLogs(userId);
   local[dayKey] = {
     ...(local[dayKey] || {}),
     ...(payload || {}),
   };
-  writeLocalLogs(userId, local);
+  const savedLocally = writeLocalLogs(userId, local);
 
   if (isLocalOnlyUser(userId)) {
-    return;
+    return { ok: savedLocally, cloud: false };
   }
 
   try {
     const ref = doc(db, "users", userId, "logs", dayKey);
     await setDoc(ref, payload, { merge: true });
+    return { ok: true, cloud: true };
   } catch {
-    return;
+    if (savedLocally) setPending(userId, [...getPending(userId), dayKey]);
+    return { ok: savedLocally, cloud: false };
   }
 }
 

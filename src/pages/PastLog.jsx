@@ -5,7 +5,7 @@ import EmojiScale from "../components/EmojiScale";
 import TogglePair from "../components/TogglePair";
 import { BACKFILL_QUESTIONS } from "../backfillQuestions";
 import useLog from "../hooks/useLog";
-import { dateKey, saveLog } from "../firebase";
+import { logDayKey, saveLog } from "../firebase";
 
 function isDateKey(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) return false;
@@ -98,7 +98,8 @@ function PastLogForDate({ user, date, onSaved }) {
       });
 
       payload.completedSections = [...completed];
-      await saveLog(user.uid, date, payload);
+      const result = await saveLog(user.uid, date, payload);
+      if (!result.ok) throw new Error("device storage may be full");
       onSaved?.();
       navigate("/history", { replace: true });
     } catch (err) {
@@ -231,7 +232,7 @@ function PageMessage({ message }) {
 
 export default function PastLog({ user, onSaved }) {
   const { date } = useParams();
-  if (!isDateKey(date) || date >= dateKey()) {
+  if (!isDateKey(date) || date >= logDayKey()) {
     return <Navigate to="/log" replace />;
   }
   return <PastLogForDate user={user} date={date} onSaved={onSaved} />;

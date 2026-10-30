@@ -21,7 +21,8 @@ const addDays = (iso, n) => {
 // kind: "scale" (0–4), "rate" (true/false), "hours", "bpm"
 export const OUTCOMES = {
   mood: { label: "mood", kind: "scale", get: (d) => d.mood, scaleNote: "0 = very low, 4 = very good" },
-  activation: { label: "activation", kind: "scale", get: (d) => d.activation, scaleNote: "0 = want to stay in bed, 2 = normal, 4 = can't sit still" },
+  activation: { label: "mind speed", kind: "scale", get: (d) => d.activation, scaleNote: "0 = foggy or blank, 2 = normal, 4 = racing" },
+  body: { label: "body energy", kind: "scale", get: (d) => d.body, scaleNote: "0 = heavy, 2 = normal, 4 = restless" },
   painStop: { label: "pain getting in the way", kind: "scale", get: (d) => d.painStop, scaleNote: "0 = no, 2 = slowing down, 4 = stopping activity" },
   hardStart: { label: "trouble starting tasks", kind: "scale", get: (d) => d.hardStart, scaleNote: "0 = no, 4 = couldn't start" },
   potsAny: { label: "POTS symptoms (dizzy, palpitations, or fainting)", kind: "rate", get: (d) => d.potsAny },
@@ -36,7 +37,7 @@ const MIN_DIFF = { scale: 0.75, rate: 0.25, hours: 1, bpm: 10 };
 // split(day) -> true (group A) | false (group B) | null (exclude)
 // lag: outcome is read from the day `lag` days after the split day
 export const CHECKS = [
-  ...["mood", "activation", "painStop", "potsAny"].map((out) => ({
+  ...["mood", "activation", "body", "painStop", "potsAny"].map((out) => ({
     id: `shortSleep-${out}`, outcome: out, lag: 0,
     split: (d) => d.sleepShort,
     a: "days after under 6 hours of sleep", b: "days after 6+ hours",
@@ -53,10 +54,12 @@ export const CHECKS = [
   { id: "caffeine-sleep", outcome: "sleepHours", lag: 1, split: (d) => (d.caffeine == null ? null : d.caffeine >= 2), a: "nights after 2+ caffeine drinks", b: "nights after 0–1" },
   { id: "caffeine-hr", outcome: "hrMax", lag: 0, split: (d) => (d.caffeine == null ? null : d.caffeine >= 2), a: "days with 2+ caffeine drinks", b: "days with 0–1" },
   { id: "sensory-melt", outcome: "meltdownOrShutdown", lag: 0, split: (d) => (d.sensory == null ? null : d.sensory >= 2.5), a: "days rated a lot or too much loud/bright/crowded", b: "calmer days" },
-  { id: "sensory-act-next", outcome: "activation", lag: 1, split: (d) => (d.sensory == null ? null : d.sensory >= 2.5), a: "the day after a loud/bright/crowded day", b: "the day after a calmer day" },
+  { id: "sensory-act-next", outcome: "body", lag: 1, split: (d) => (d.sensory == null ? null : d.sensory >= 2.5), a: "the day after a loud/bright/crowded day", b: "the day after a calmer day" },
   { id: "people-melt", outcome: "meltdownOrShutdown", lag: 0, split: (d) => (d.people == null ? null : d.people >= 4), a: "days with a lot of people time", b: "days with less" },
-  { id: "people-act-next", outcome: "activation", lag: 1, split: (d) => (d.people == null ? null : d.people >= 4), a: "the day after a lot of people time", b: "the day after less" },
+  { id: "people-act-next", outcome: "body", lag: 1, split: (d) => (d.people == null ? null : d.people >= 4), a: "the day after a lot of people time", b: "the day after less" },
   { id: "masking-mood-next", outcome: "mood", lag: 1, split: (d) => (d.masking == null ? null : d.masking >= 4), a: "the day after masking a lot", b: "the day after masking less" },
+  { id: "sick-mood", outcome: "mood", lag: 0, split: (d) => d.sick, a: "days marked sick or injured", b: "other days" },
+  { id: "sick-body", outcome: "body", lag: 0, split: (d) => d.sick, a: "days marked sick or injured", b: "other days" },
   { id: "pots-mood", outcome: "mood", lag: 0, split: (d) => d.potsAny, a: "days with POTS symptoms", b: "days without" },
   { id: "school-mood", outcome: "mood", lag: 0, split: (d) => d.schoolDay, a: "school days", b: "non-school days" },
   { id: "school-melt", outcome: "meltdownOrShutdown", lag: 0, split: (d) => d.schoolDay, a: "school days", b: "non-school days" },

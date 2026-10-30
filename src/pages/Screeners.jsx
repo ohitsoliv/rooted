@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import BottomNav from "../components/BottomNav";
 import { PHQ9, GAD7, FREQUENCY, total } from "../screeners";
-import { saveLog, dateKey } from "../firebase";
+import { saveLog, logDayKey } from "../firebase";
 import { playTap } from "../utils";
 
 const font = "'Nunito', sans-serif";
@@ -40,14 +40,20 @@ export default function Screeners({ user, onDone, onSafety }) {
   const [phq, setPhq] = useState(Array(PHQ9.items.length).fill(null));
   const [gad, setGad] = useState(Array(GAD7.items.length).fill(null));
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
   const complete = phq.every((a) => a !== null) && gad.every((a) => a !== null);
 
   const save = async () => {
     setSaving(true);
-    const today = dateKey();
-    await saveLog(user.uid, today, {
+    const today = logDayKey();
+    const result = await saveLog(user.uid, today, {
       screeners: { phq9: phq, gad7: gad, phq9Total: total(phq), gad7Total: total(gad), takenAt: new Date().toISOString() },
     });
+    if (!result.ok) {
+      setSaving(false);
+      setError("That didn't save — please try again.");
+      return;
+    }
     await onDone?.(today);
     setSaving(false);
     navigate("/");
@@ -59,12 +65,13 @@ export default function Screeners({ user, onDone, onSafety }) {
         <button onClick={() => navigate("/")} style={{ background: "none", border: "none", fontFamily: font, fontSize: "14px", fontWeight: 600, color: "var(--brown-light)", cursor: "pointer", padding: 0 }}>← Home (do it later)</button>
         <h1 style={{ fontFamily: "'Fraunces', serif", fontSize: "22px", color: "var(--brown)", margin: "8px 0 4px" }}>2-week check</h1>
         <p style={{ fontFamily: font, fontSize: "13px", color: "var(--brown-light)", margin: 0 }}>
-          These are the standard questions doctors use (PHQ-9 and GAD-7). The wording can't be changed, so answer with your best guess.
+          Same questions every 2 weeks. The wording is fixed, so a best guess is fine.
         </p>
       </header>
       <main style={{ padding: "8px 16px", display: "flex", flexDirection: "column", gap: "14px", maxWidth: "560px", margin: "0 auto" }}>
         <Tool tool={PHQ9} answers={phq} setAnswers={setPhq} onItem={(i, v) => { if (i === 8 && v > 0) onSafety?.("phq9"); }} />
         <Tool tool={GAD7} answers={gad} setAnswers={setGad} />
+        {error && <p role="alert" style={{ fontFamily: font, fontSize: "13px", fontWeight: 700, color: "var(--terra-dark)", margin: 0 }}>{error}</p>}
         <button type="button" disabled={!complete || saving} onClick={save}
           style={{ fontFamily: font, fontSize: "15px", fontWeight: 700, color: complete ? "var(--white)" : "var(--brown-light)", background: complete ? "var(--mauve)" : "var(--tan-light)", border: "none", borderRadius: "14px", padding: "14px", cursor: complete ? "pointer" : "not-allowed" }}>
           {saving ? "Saving…" : complete ? "Save 2-week check" : "Answer every question to save"}

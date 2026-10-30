@@ -22,13 +22,27 @@ export const MOOD_OPTIONS = [
   o("vgood", "Very good", 4, "😄"),
 ];
 
-export const ACTIVATION_OPTIONS = [
-  o("bed", "Want to stay in bed", 0, "🛌"),
-  o("slow", "Slow and heavy", 1, "🐢"),
-  o("normal", "Normal", 2, "🙂"),
-  o("high", "Lots of energy, want to do things", 3, "⚡"),
-  o("wired", "Can't sit still or stop talking", 4, "🌪️"),
+// Body and mind are asked separately: they can point in opposite directions
+// (e.g. heavy body + racing mind), and that mismatch is clinically useful.
+export const BODY_OPTIONS = [
+  o("heavy", "Heavy, want to stay in bed", 0, "🛌"),
+  o("slow", "Slow and tired", 1, "🐢"),
+  o("normal", "My usual", 2, "🙂"),
+  o("energy", "Lots of energy", 3, "⚡"),
+  o("restless", "Restless, can't sit still", 4, "🦘"),
 ];
+
+// Stored under the field name "activation" (mind speed).
+export const ACTIVATION_OPTIONS = [
+  o("blank", "Foggy or blank", 0, "🌫️"),
+  o("slow", "Slow", 1, "🐌"),
+  o("normal", "My usual", 2, "🙂"),
+  o("busy", "Busy, lots of ideas", 3, "💭"),
+  o("racing", "Racing, can't stop thinking or talking", 4, "🌪️"),
+];
+
+// Answers saved with the earlier single combined scale.
+export const LEGACY_ACTIVATION_SCORES = { bed: 0, slow: 1, normal: 2, high: 3, wired: 4 };
 
 export const PAIN_STOP_OPTIONS = [
   o("no", "No", 0),
@@ -76,10 +90,23 @@ export const SAFETY_OPTIONS = [
 /* ---------- Check-in (repeatable) ---------- */
 
 export const CHECKIN_QUESTIONS = [
-  { id: "activation", prompt: "Which is closest right now?", type: "single", options: ACTIVATION_OPTIONS, layout: "stack", ge: true },
+  {
+    // Shown when the previous check-in today listed something in "doing".
+    // CheckInSection passes _prevDoing in and names those things in the hint.
+    id: "didItHelp", prompt: "Did that help?", type: "single",
+    showIf: (a) => Array.isArray(a._prevDoing) && a._prevDoing.length > 0,
+    options: [o("yes", "Yes"), o("bit", "A bit"), o("no", "No"), o("worse", "Made it worse")],
+  },
+  { id: "body", prompt: "How does your body feel?", type: "single", options: BODY_OPTIONS, layout: "stack", ge: true },
+  { id: "activation", prompt: "How does your mind feel?", type: "single", options: ACTIVATION_OPTIONS, layout: "stack", ge: true },
   { id: "mood", prompt: "Mood right now", type: "single", options: MOOD_OPTIONS, layout: "faces", ge: true },
   { id: "painStop", prompt: "Is pain stopping you from doing things?", type: "single", options: PAIN_STOP_OPTIONS, ge: true },
   { id: "painWhere", prompt: "Where?", type: "multi", options: BODY_LOCATIONS, dk: false, showIf: (a) => a.painStop === "slow" || a.painStop === "stop" },
+  {
+    id: "doing", prompt: "Doing anything about it?", hint: "Pick any", type: "multi", exclusive: "nothing",
+    showIf: (a) => a.mood === "vlow" || a.mood === "low" || a.painStop === "slow" || a.painStop === "stop",
+    options: [o("rest", "Resting"), o("music", "Music"), o("alone", "Alone time"), o("saltWater", "Salt or water"), o("meds", "Meds"), o("moving", "Moving / stretching"), o("talking", "Talking to someone"), o("stim", "Stimming"), o("comfort", "Comfort thing (show, food, pet)"), o("nothing", "Nothing right now")],
+  },
   { id: "situation", prompt: "What's going on?", hint: "Tap any that fit", type: "multi", options: SITUATION_TAGS },
   { id: "heartRate", prompt: "Heart rate", hint: "Optional, bpm", type: "number", optional: true, dk: false, min: 30, max: 250 },
   { id: "hrPosition", prompt: "Position when measured", type: "single", options: [o("lying", "Lying"), o("sitting", "Sitting"), o("standing", "Standing")], dk: false, showIf: (a) => Boolean(a.heartRate) },
@@ -108,35 +135,55 @@ const SLEEP = [
     id: "keptUp", prompt: "What kept you up?", type: "multi", showIf: (a) => a.sleepQuality === "awful" || a.sleepQuality === "poor",
     options: [o("racing", "Mind racing"), o("pain", "Pain"), o("heart", "Heart racing or too hot"), o("woke", "Woke up a lot")],
   },
+  {
+    id: "helpedSleep", prompt: "Anything help last night?", type: "multi", exclusive: "noIdea",
+    showIf: (a) => a.sleepQuality === "good" || a.sleepQuality === "great",
+    options: [o("windDown", "Wind-down routine"), o("noScreens", "No screens"), o("meds", "Meds"), o("noise", "White noise / sound"), o("tired", "Tired from the day"), o("noIdea", "No idea")],
+  },
   { id: "nightmares", prompt: "Nightmares?", type: "single", options: YES_NO },
   { id: "nap", prompt: "Nap yesterday?", type: "single", optional: true, options: [o("none", "None", 0), o("short", "Short", 2), o("long", "Long", 4)] },
 ];
 
 const SHIFT_TRIGGERS = [...SITUATION_TAGS.filter((t) => t.id !== "nothing"), o("outOfNowhere", "Out of nowhere")];
 
+// Wording is deliberately everyday: no single question should give away what
+// it's looking for (it's easier to answer honestly without second-guessing).
+// Clinical meaning is recovered in src/analysis/normalize.js and report.js.
 const DAY = [
   {
-    id: "steady", prompt: "How steady was today?", type: "single", max: 2,
-    options: [o("same", "About the same all day", 0), o("some", "Some ups and downs", 1), o("big", "Big ups and downs", 2)],
+    id: "steady", prompt: "Today was like…", type: "single", max: 2,
+    options: [o("same", "Flat road", 0), o("some", "Some bumps", 1), o("big", "Roller coaster", 2)],
   },
   {
-    id: "shiftLength", prompt: "How long did the biggest change last?", type: "single",
+    id: "shiftLength", prompt: "How long did the biggest bump last?", type: "single",
     showIf: (a) => a.steady === "some" || a.steady === "big",
     options: [o("minutes", "Minutes"), o("hours", "A few hours"), o("most", "Most of the day"), o("days", "It's been going for days")],
   },
-  { id: "shiftTrigger", prompt: "Did something set it off?", type: "multi", options: SHIFT_TRIGGERS, showIf: (a) => a.steady === "some" || a.steady === "big" },
+  { id: "shiftTrigger", prompt: "Anything set it off?", type: "multi", options: SHIFT_TRIGGERS, showIf: (a) => a.steady === "some" || a.steady === "big" },
+  {
+    id: "anhedonia", prompt: "Did things you usually like feel boring or pointless?", type: "single",
+    options: [o("no", "No", 0), o("bit", "A bit", 2), o("yes", "Yes", 4)],
+  },
+  {
+    id: "more", prompt: "Today I had more…", hint: "Pick any", type: "multi", exclusive: "nothing",
+    options: [o("ideas", "Ideas"), o("plans", "Plans"), o("energy", "Energy"), o("chatting", "Chatting"), o("buying", "Things I wanted to buy"), o("motivation", "Motivation"), o("nothing", "Nothing extra")],
+  },
+  {
+    id: "othersMad", prompt: "Did you think someone was mad at you or pulling away?", type: "single",
+    options: [o("no", "No", 0), o("little", "A little", 2), o("lot", "A lot", 4)],
+  },
   {
     id: "meltdown", prompt: "Meltdown or shutdown today?", type: "single",
     options: [o("no", "No"), o("almost", "Almost"), o("meltdown", "Meltdown"), o("shutdown", "Shutdown"), o("both", "Both")],
   },
-  { id: "anhedonia", prompt: "Did things you usually like feel boring or pointless?", type: "single", options: [o("no", "No", 0), o("bit", "A bit", 2), o("yes", "Yes", 4)] },
-  { id: "othersMad", prompt: "Did you think someone was mad at you or pulling away?", type: "single", options: [o("no", "No", 0), o("little", "A little", 2), o("lot", "A lot", 4)] },
-  { id: "talkingFast", prompt: "Did anyone say you were talking a lot or fast?", type: "single", options: YES_NO },
-  { id: "newProjects", prompt: "Did you start several new projects or ideas?", type: "single", options: YES_NO },
-  { id: "noRest", prompt: "Did you feel like you didn't need to rest?", type: "single", options: YES_NO },
   {
-    id: "impulsive", prompt: "Did you do anything on impulse you normally wouldn't?", type: "multi", exclusive: "none",
-    options: [o("spent", "Spent money"), o("ate", "Ate a lot"), o("substances", "Alcohol or substances"), o("risky", "Something risky"), o("regret", "Said something I regret"), o("none", "None")],
+    id: "helpedCalm", prompt: "What helped you come back down?", type: "multi", exclusive: "nothingYet",
+    showIf: (a) => ["almost", "meltdown", "shutdown", "both"].includes(a.meltdown),
+    options: [o("quiet", "Quiet or dark space"), o("headphones", "Headphones"), o("alone", "Alone time"), o("pressure", "Pressure / weighted blanket"), o("stim", "Stimming"), o("sleep", "Sleep"), o("someone", "Someone helped"), o("nothingYet", "Nothing yet")],
+  },
+  {
+    id: "bestPart", prompt: "Best part of today?", type: "multi", optional: true,
+    options: [o("food", "Food"), o("people", "People"), o("quiet", "Quiet time"), o("made", "Something I made"), o("funny", "Something funny"), o("done", "Got stuff done"), o("pets", "Animals"), o("nothing", "Nothing much")],
   },
 ];
 
@@ -145,6 +192,11 @@ const BODY = [
   { id: "stomach", prompt: "Stomach (nausea, cramps)", type: "single", options: SEVERITY, max: 3 },
   { id: "tension", prompt: "Muscle tension or clenching", type: "single", options: SEVERITY, max: 3 },
   { id: "thinkClearly", prompt: "Was it hard to think clearly?", type: "single", options: SEVERITY, max: 3 },
+  {
+    id: "helpedBody", prompt: "What helped your body today?", type: "multi", exclusive: "nothingWorked",
+    showIf: (a) => ["headache", "stomach", "tension", "thinkClearly"].some((k) => a[k] === "hard" || a[k] === "couldnt"),
+    options: [o("lyingDown", "Lying down"), o("saltWater", "Salt or water"), o("compression", "Compression"), o("heatIce", "Heat or ice"), o("stretching", "Stretching"), o("meds", "Meds"), o("nothingWorked", "Nothing worked")],
+  },
   {
     id: "period", prompt: "Period today?", type: "single", dk: false,
     showIf: (_a, profile) => Boolean(profile?.cycleTracking),
@@ -191,12 +243,34 @@ const SCHOOL = [
     id: "events", prompt: "Anything big happen?", type: "multi", optional: true,
     options: [o("conflict", "Conflict"), o("test", "Test"), o("cancelled", "Plans cancelled"), o("goodNews", "Good news"), o("loss", "Loss"), o("other", "Other")],
   },
+  {
+    id: "impulsive", prompt: "Anything today that surprised you about yourself?", type: "multi", exclusive: "none",
+    options: [o("spent", "Bought something"), o("regret", "Said something"), o("risky", "Tried something new"), o("ate", "Ate a lot"), o("late", "Stayed up late"), o("none", "Nope")],
+  },
   { id: "win", prompt: "Win of the day", hint: "Tiny wins count", type: "text", optional: true, dk: false, placeholder: "e.g. Took my meds" },
 ];
 
 const WRAP = [
-  { id: "safety", prompt: "Did you have thoughts of hurting yourself or not wanting to be alive today?", type: "single", options: SAFETY_OPTIONS, dk: false, ge: true, safety: true },
+  {
+    id: "helpedToday", prompt: "Something that helped today?", type: "multi", optional: true, exclusive: "nothing",
+    options: [o("rest", "Rest"), o("music", "Music"), o("alone", "Alone time"), o("people", "People"), o("outside", "Going outside"), o("food", "Good food"), o("meds", "Meds"), o("interest", "Favorite thing / special interest"), o("nothing", "Nothing really")],
+  },
+  { id: "safety", prompt: "Any thoughts today of not wanting to be here, or of hurting yourself?", type: "single", options: SAFETY_OPTIONS, dk: false, ge: true, safety: true },
   { id: "dayNote", prompt: "Anything you want to remember about today?", type: "text", optional: true, dk: false, placeholder: "Optional — you choose later whether doctors see it" },
+];
+
+/* ---------- Weekly look-back ---------- */
+
+export const LOOKBACK_QUESTIONS = [
+  {
+    id: "overall", prompt: "Looking back at the past week, it was…", type: "single",
+    options: [o("usual", "Mostly my usual"), o("down", "More down"), o("up", "More up"), o("mixed", "Up and down")],
+  },
+  {
+    id: "hindsight", prompt: "Anything look different now than it felt at the time?", type: "single",
+    options: [o("no", "No"), o("wound", "I was more wound up than I realized"), o("lower", "I was lower than I realized"), o("both", "Both, at different times")],
+  },
+  { id: "note", prompt: "Anything stand out?", type: "text", optional: true, dk: false, placeholder: "Optional" },
 ];
 
 /* ---------- Section registry ---------- */
@@ -219,7 +293,19 @@ for (const s of SECTIONS) {
 
 export const SECTION_BY_ID = Object.fromEntries(SECTIONS.map((s) => [s.id, s]));
 
-export const sectionsFor = (goodEnough) => (goodEnough ? SECTIONS.filter((s) => s.ge) : SECTIONS);
+/** Sections that can't be turned off (check-in and the safety question). */
+export const LOCKED_SECTIONS = ["checkins", "wrap"];
+
+const hiddenSet = (profile) => new Set(profile?.hidden || []);
+
+export const sectionsFor = (goodEnough, profile) => {
+  const hidden = hiddenSet(profile);
+  return SECTIONS.filter((s) => (goodEnough ? s.ge : true) && (LOCKED_SECTIONS.includes(s.id) || !hidden.has(s.id)));
+};
+
+/** True if the person turned this question off in Settings. Safety can't be hidden. */
+export const isHidden = (q, sectionId, profile) =>
+  !q.safety && hiddenSet(profile).has(`${sectionId}.${q.id}`);
 
 /** All questions keyed "section.field" for lookups in history/export. */
 export const QUESTION_INDEX = (() => {
@@ -231,8 +317,9 @@ export const QUESTION_INDEX = (() => {
 
 export const hasDk = (q) => q.dk !== false && (q.type === "single" || q.type === "multi");
 
-export const isVisible = (q, answers, profile, goodEnough) => {
+export const isVisible = (q, answers, profile, goodEnough, sectionId) => {
   if (goodEnough && !q.ge) return false;
+  if (sectionId && isHidden(q, sectionId, profile)) return false;
   return q.showIf ? Boolean(q.showIf(answers || {}, profile || {})) : true;
 };
 
