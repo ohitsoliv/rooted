@@ -9,6 +9,7 @@ import { useState, useCallback } from "react";
 import TogglePair from "../components/TogglePair";
 import EmojiScale from "../components/EmojiScale";
 import SkipLink from "../components/SkipLink";
+import Question from "../components/Question";
 import SectionProgress from "../components/SectionProgress";
 
 const COLOR = "teal";
@@ -529,6 +530,14 @@ export default function POTSSection({
           </div>
         </div>
       )}
+
+      {/* Worse when standing? (orthostatic pattern) */}
+      <Question
+        q={{ id: "worseStanding", prompt: "Were symptoms worse when standing?", type: "single", options: [{ id: "no", label: "No", score: 0 }, { id: "yes", label: "Yes", score: 4 }] }}
+        value={data.worseStanding}
+        onChange={(v) => onUpdate?.("worseStanding", v)}
+        color={COLOR}
+      />
 
       {/* Save */}
       <button

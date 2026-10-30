@@ -2,7 +2,12 @@
 // History page: calendar view, tap any day to see full log detail
 
 import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import BottomNav from "../components/BottomNav";
+import MonthSwitcher from "../components/MonthSwitcher";
+import { dateKey } from "../firebase";
+import { normalizeDay, checkinList } from "../analysis/normalize";
+import { SECTIONS, CHECKIN_QUESTIONS, isAnswered, labelOf } from "../questions";
 
 const MOOD_EMOJIS = ["😢", "😕", "😐", "🙂", "😊"];
 const PAIN_EMOJIS = ["😌", "🤏", "😐", "😣", "😫"];
@@ -36,16 +41,17 @@ const playTap = () => {
  * Props:
  *   logs    — array of log objects for the month
  *   loading — boolean
+ *   year, month — selected month
+ *   onMonthChange — change selected month by -1 or +1
  */
-export default function History({ logs = [], loading = false }) {
-  const [selectedDay, setSelectedDay] = useState(null);
+export default function History({ logs = [], loading = false, year, month, onMonthChange }) {
+  const [selectedDate, setSelectedDate] = useState(null);
+  const navigate = useNavigate();
 
   const now = new Date();
-  const currentDay = now.getDate();
-  const year = now.getFullYear();
-  const month = now.getMonth();
   const totalDays = new Date(year, month + 1, 0).getDate();
-  const monthName = now.toLocaleString("default", { month: "long", year: "numeric" });
+  const isCurrentMonth = year === now.getFullYear() && month === now.getMonth();
+  const currentDay = isCurrentMonth ? now.getDate() : totalDays;
 
   // What day of the week does the 1st fall on? (0=Sun)
   const firstDayOfWeek = new Date(year, month, 1).getDay();
@@ -62,7 +68,13 @@ export default function History({ logs = [], loading = false }) {
     return map;
   }, [logs]);
 
+  const selectedDay = selectedDate?.year === year && selectedDate?.month === month
+    ? selectedDate.day
+    : null;
   const selectedLog = selectedDay ? logMap[selectedDay] : null;
+  const selectedDateKey = selectedDay
+    ? `${year}-${String(month + 1).padStart(2, "0")}-${String(selectedDay).padStart(2, "0")}`
+    : null;
 
   if (loading) {
     return (
@@ -109,8 +121,9 @@ export default function History({ logs = [], loading = false }) {
           color: "var(--brown-light, #9A7E7E)",
           margin: 0,
         }}>
-          {monthName} · Tap a day to see details
+          Tap a day to see details
         </p>
+        <MonthSwitcher year={year} month={month} onMonthChange={onMonthChange} />
       </header>
 
       <main style={{
@@ -167,11 +180,13 @@ export default function History({ logs = [], loading = false }) {
               const day = i + 1;
               const log = logMap[day];
               const isLogged = !!log;
+              const isBackfilled = log?.backfilled === true;
               const isFlare = log?.eds?.flareDay === true;
-              const isToday = day === currentDay;
+              const isToday = isCurrentMonth && day === currentDay;
               const isFuture = day > currentDay;
               const isSelected = day === selectedDay;
-              const mood = log?.mood?.overallMood;
+              const normMood = log ? normalizeDay(log).mood : null;
+              const mood = normMood == null ? undefined : Math.round(normMood);
 
               return (
                 <button
@@ -179,7 +194,7 @@ export default function History({ logs = [], loading = false }) {
                   onClick={() => {
                     if (!isFuture) {
                       playTap();
-                      setSelectedDay(isSelected ? null : day);
+                      setSelectedDate(isSelected ? null : { year, month, day });
                     }
                   }}
                   disabled={isFuture}
@@ -193,6 +208,8 @@ export default function History({ logs = [], loading = false }) {
                     borderRadius: "12px",
                     border: isSelected
                       ? "2.5px solid var(--terra, #C1724F)"
+                      : isBackfilled
+                        ? "2px dashed var(--terra, #C1724F)"
                       : isToday
                         ? "2px solid var(--brown, #3B2F2F)"
                         : "1.5px solid transparent",
@@ -241,7 +258,8 @@ export default function History({ logs = [], loading = false }) {
           }}>
             <LegendDot color="color-mix(in srgb, var(--sage) 12%, var(--white))" border="var(--sage)" label="Logged" />
             <LegendDot color="color-mix(in srgb, var(--terra) 15%, var(--white))" border="var(--terra)" label="Flare" />
-            <LegendDot color="transparent" border="var(--brown)" label="Today" />
+            <LegendDot color="transparent" border="var(--terra)" label="Filled in later" dashed />
+            {isCurrentMonth && <LegendDot color="transparent" border="var(--brown)" label="Today" />}
           </div>
         </div>
 
@@ -267,10 +285,10 @@ export default function History({ logs = [], loading = false }) {
                 color: "var(--brown, #3B2F2F)",
                 margin: 0,
               }}>
-                Day {selectedDay}
+                {`${year}-${String(month + 1).padStart(2, "0")}-${String(selectedDay).padStart(2, "0")}`}
               </h3>
               <button
-                onClick={() => { playTap(); setSelectedDay(null); }}
+                onClick={() => { playTap(); setSelectedDate(null); }}
                 style={{
                   fontFamily: "'Nunito', sans-serif",
                   fontSize: "12px",
@@ -293,6 +311,17 @@ export default function History({ logs = [], loading = false }) {
                 flexDirection: "column",
                 gap: "10px",
               }}>
+                {selectedLog.backfilled && (
+                  <p style={{
+                    fontFamily: "'Nunito', sans-serif",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    color: "var(--terra, #C1724F)",
+                    margin: 0,
+                  }}>
+                    Filled in later from memory
+                  </p>
+                )}
                 {/* Completed sections */}
                 {selectedLog.completedSections?.length > 0 && (
                   <div style={{
@@ -339,11 +368,15 @@ export default function History({ logs = [], loading = false }) {
                     sub={selectedLog.mood.emotionPath || selectedLog.mood.emotion || null}
                   />
                 )}
+                {selectedLog.mood?.note && (
+                  <DetailRow color="mauve" label="Mood note" value={selectedLog.mood.note} />
+                )}
 
                 {/* Check-ins */}
                 {(() => {
                   const cis = selectedLog.checkins?.checkins || selectedLog.checkins;
-                  if (Array.isArray(cis) && cis.length > 0) {
+                  // Older check-ins only; new ones are listed by <AnswerList>
+                  if (Array.isArray(cis) && cis.length > 0 && typeof cis[cis.length - 1].mood === "number") {
                     const last = cis[cis.length - 1];
                     return (
                       <DetailRow
@@ -456,6 +489,7 @@ export default function History({ logs = [], loading = false }) {
                     )}
                   </div>
                 )}
+                <AnswerList log={selectedLog} />
               </div>
             ) : (
               <p style={{
@@ -467,6 +501,29 @@ export default function History({ logs = [], loading = false }) {
               }}>
                 No log for this day — and that's okay 🌿
               </p>
+            )}
+            {selectedDateKey && selectedDateKey < dateKey() && (
+              <button
+                type="button"
+                onClick={() => navigate(`/log/${selectedDateKey}`)}
+                style={{
+                  display: "block",
+                  margin: "0 auto",
+                  border: 0,
+                  borderRadius: "12px",
+                  padding: "10px 16px",
+                  background: "var(--terra, #C1724F)",
+                  color: "var(--white, #FFFDF8)",
+                  fontFamily: "'Nunito', sans-serif",
+                  fontSize: "14px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                {selectedLog?.completedSections?.length && !selectedLog.backfilled
+                  ? "Review or edit this day"
+                  : "Log this day"}
+              </button>
             )}
           </div>
         )}
@@ -562,7 +619,7 @@ function DetailRow({ color, label, value, sub }) {
   );
 }
 
-function LegendDot({ color, border, label }) {
+function LegendDot({ color, border, label, dashed = false }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
       <div style={{
@@ -570,7 +627,7 @@ function LegendDot({ color, border, label }) {
         height: "12px",
         borderRadius: "4px",
         background: color,
-        border: `2px solid ${border}`,
+        border: `2px ${dashed ? "dashed" : "solid"} ${border}`,
       }} />
       <span style={{
         fontFamily: "'Nunito', sans-serif",
@@ -613,6 +670,46 @@ function MiniStat({ label, value, sub, color }) {
       }}>
         {label}
       </span>
+    </div>
+  );
+}
+
+/** Every answer from the current question set, grouped by section. */
+function AnswerList({ log }) {
+  const groups = [];
+  const cis = checkinList(log);
+  cis.forEach((ci, i) => {
+    const rows = CHECKIN_QUESTIONS.filter((q) => isAnswered(ci[q.id]))
+      .map((q) => [q.prompt, q.options ? labelOf(q, ci[q.id]) : String(ci[q.id])]);
+    if (ci.emotion) rows.push(["Feeling", ci.emotion]);
+    if (rows.length) {
+      const time = ci.timestamp ? new Date(ci.timestamp).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : `#${i + 1}`;
+      groups.push({ title: `📝 Check-in ${time}`, rows });
+    }
+  });
+  for (const s of SECTIONS) {
+    if (!s.questions) continue;
+    const data = log[s.id] || {};
+    const rows = s.questions.filter((q) => q.type !== "meds" && isAnswered(data[q.id])).map((q) => [q.prompt, labelOf(q, data[q.id])]);
+    if (s.id === "nutrition" && data.meds && typeof data.meds === "object") {
+      const statuses = Object.values(data.meds).filter((v) => v && typeof v === "object" && v.status).map((v) => v.status);
+      if (statuses.length) rows.unshift(["Meds", statuses.join(", ")]);
+    }
+    if (rows.length) groups.push({ title: `${s.emoji} ${s.label}`, rows });
+  }
+  if (!groups.length) return null;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+      {groups.map((g) => (
+        <div key={g.title} style={{ padding: "10px 12px", background: "var(--cream)", borderRadius: "12px", border: "1px solid var(--tan-light)" }}>
+          <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: "13px", fontWeight: 700, color: "var(--brown)", margin: "0 0 4px" }}>{g.title}</p>
+          {g.rows.map(([k, v]) => (
+            <p key={k} style={{ fontFamily: "'Nunito', sans-serif", fontSize: "12px", color: "var(--brown)", margin: "2px 0" }}>
+              <span style={{ color: "var(--brown-light)" }}>{k}</span> — {v}
+            </p>
+          ))}
+        </div>
+      ))}
     </div>
   );
 }

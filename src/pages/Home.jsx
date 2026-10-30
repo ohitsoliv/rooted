@@ -7,16 +7,8 @@ import Garden from "../components/Garden.jsx";
 import GoodEnoughToggle from "../components/GoodEnoughToggle";
 import BottomNav from "../components/BottomNav";
 
-const SECTIONS = [
-  { id: "sleep",      label: "Sleep",          emoji: "😴", color: "mauve",  time: "~1 min" },
-  { id: "checkins",   label: "Check-in",       emoji: "📝", color: "terra",  time: "~30 sec" },
-  { id: "mood",       label: "Mood",           emoji: "💜", color: "mauve",  time: "~2 min" },
-  { id: "symptoms",   label: "Symptoms",       emoji: "🩺", color: "sage",   time: "~1 min" },
-  { id: "pots",       label: "POTS",           emoji: "💙", color: "teal",   time: "~1.5 min" },
-  { id: "eds",        label: "EDS",            emoji: "🧡", color: "amber",  time: "~1.5 min" },
-  { id: "nutrition",  label: "Nutrition",      emoji: "🍽️", color: "gold",   time: "~2 min" },
-  { id: "habits",     label: "Habits + School", emoji: "⭐", color: "mauve",  time: "~2 min" },
-];
+import { sectionsFor, MOOD_OPTIONS, ACTIVATION_OPTIONS } from "../questions";
+import { screenerDue } from "../profile";
 
 const GREETINGS = {
   morning: [
@@ -96,7 +88,9 @@ export default function Home({
   goodEnough = false,
   onGoodEnoughToggle,
   onLogout,
+  profile,
 }) {
+  const SECTIONS = sectionsFor(goodEnough);
   const navigate = useNavigate();
   const [greeting] = useState(getGreeting);
   const [encouragement] = useState(getEncouragement);
@@ -107,13 +101,13 @@ export default function Home({
   );
 
   const totalSections = SECTIONS.length;
-  const doneSections = completedSections.length;
+  const doneSections = SECTIONS.filter((s) => completedSet.has(s.id)).length;
   const progressPct = totalSections > 0 ? Math.round((doneSections / totalSections) * 100) : 0;
 
   // Quick chips from today's mood/pain/energy (from check-ins or mood section)
-  const latestCheckin = (log.checkins || []).length > 0
-    ? log.checkins[log.checkins.length - 1]
-    : null;
+  const checkinList = Array.isArray(log.checkins) ? log.checkins : log.checkins?.checkins || [];
+  const latestCheckin = checkinList.length > 0 ? checkinList[checkinList.length - 1] : null;
+  const dueScreener = screenerDue(profile);
 
   const now = new Date();
   const currentDay = now.getDate();
@@ -268,34 +262,33 @@ export default function Home({
             }} />
           </div>
 
-          {/* Quick chips */}
+          {/* Quick chips — latest check-in */}
           {latestCheckin && (
-            <div style={{
-              display: "flex",
-              gap: "8px",
-              flexWrap: "wrap",
-            }}>
-              {latestCheckin.mood != null && (
-                <Chip
-                  label="Mood"
-                  emoji={["😢","😕","😐","🙂","😊"][latestCheckin.mood] || "—"}
-                />
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              {MOOD_OPTIONS.find((m) => m.id === latestCheckin.mood) && (
+                <Chip label="Mood" emoji={MOOD_OPTIONS.find((m) => m.id === latestCheckin.mood).emoji} />
               )}
-              {latestCheckin.pain != null && (
-                <Chip
-                  label="Pain"
-                  emoji={["😌","🤏","😐","😣","😫"][latestCheckin.pain] || "—"}
-                />
-              )}
-              {latestCheckin.energy != null && (
-                <Chip
-                  label="Energy"
-                  emoji={["🪫","😮‍💨","😐","⚡","🔋"][latestCheckin.energy] || "—"}
-                />
+              {ACTIVATION_OPTIONS.find((m) => m.id === latestCheckin.activation) && (
+                <Chip label={ACTIVATION_OPTIONS.find((m) => m.id === latestCheckin.activation).label} emoji={ACTIVATION_OPTIONS.find((m) => m.id === latestCheckin.activation).emoji} />
               )}
             </div>
           )}
         </div>
+
+        {/* 2-week check (PHQ-9 / GAD-7) */}
+        {dueScreener && (
+          <button
+            onClick={() => { playTap(); navigate("/screeners"); }}
+            style={{
+              display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "2px",
+              padding: "14px 16px", background: "var(--white)", border: "2px dashed var(--mauve)",
+              borderRadius: "16px", cursor: "pointer", textAlign: "left", fontFamily: "'Nunito', sans-serif",
+            }}
+          >
+            <span style={{ fontSize: "15px", fontWeight: 700, color: "var(--mauve-dark)" }}>🗓️ 2-week check is ready</span>
+            <span style={{ fontSize: "12px", color: "var(--brown-light)" }}>16 quick questions doctors use · about 2 minutes</span>
+          </button>
+        )}
 
         {/* Good Enough Mode */}
         <GoodEnoughToggle
@@ -422,6 +415,13 @@ export default function Home({
             : doneSections >= totalSections
               ? "All Done! Review 🎉"
               : "Continue Logging →"}
+        </button>
+
+        <button
+          onClick={() => { playTap(); navigate("/settings"); }}
+          style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "'Nunito', sans-serif", fontSize: "14px", fontWeight: 700, color: "var(--mauve-dark)", padding: "8px", margin: "0 auto" }}
+        >
+          ⚙️ Settings — meds, period tracking, support contact
         </button>
 
         {/* Logout — subtle */}

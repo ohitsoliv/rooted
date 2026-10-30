@@ -1,40 +1,15 @@
 // src/pages/Log.jsx — Rooted Health Tracker
-// Main logging page — orchestrates all 8 sections, celebration overlay, navigation
+// Main logging page — orchestrates the sections defined in src/questions.js, celebration overlay, navigation
 
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import BottomNav from "../components/BottomNav";
 import Celebration from "../components/Celebration";
-import SleepSection from "../sections/SleepSection";
 import CheckInSection from "../sections/CheckInSection";
-import MoodSection from "../sections/MoodSection";
-import SymptomsSection from "../sections/SymptomsSection";
 import POTSSection from "../sections/POTSSection";
 import EDSSection from "../sections/EDSSection";
-import NutritionSection from "../sections/NutritionSection";
-import HabitsSchoolSection from "../sections/HabitsSchoolSection";
-
-const SECTION_ORDER = [
-  "sleep",
-  "checkins",
-  "mood",
-  "symptoms",
-  "pots",
-  "eds",
-  "nutrition",
-  "habits",
-];
-
-const SECTION_META = {
-  sleep:     { label: "Sleep",            emoji: "😴", color: "mauve" },
-  checkins:  { label: "Check-in",         emoji: "📝", color: "terra" },
-  mood:      { label: "Mood",             emoji: "💜", color: "mauve" },
-  symptoms:  { label: "Symptoms",         emoji: "🩺", color: "sage" },
-  pots:      { label: "POTS",             emoji: "💙", color: "teal" },
-  eds:       { label: "EDS",              emoji: "🧡", color: "amber" },
-  nutrition: { label: "Nutrition",        emoji: "🍽️", color: "gold" },
-  habits:    { label: "Habits + School",  emoji: "⭐", color: "mauve" },
-};
+import QuestionSection from "../sections/QuestionSection";
+import { SECTION_BY_ID, sectionsFor } from "../questions";
 
 const playTap = () => {
   try {
@@ -63,7 +38,8 @@ const playTap = () => {
  *   goodEnough       — boolean
  *   onUpdateField    — (section, field, value) => void
  *   onSaveSection    — (sectionName) => Promise
- *   yesterdayLog     — yesterday's log (for "same as yesterday")
+ *   profile          — user profile (meds, cycle tracking)
+ *   onSafety         — (level) => void, opens the support screen
  */
 export default function Log({
   log = {},
@@ -71,8 +47,11 @@ export default function Log({
   goodEnough = false,
   onUpdateField,
   onSaveSection,
-  yesterdayLog = null,
+  profile,
+  onSafety,
 }) {
+  const SECTION_ORDER = useMemo(() => sectionsFor(goodEnough).map((x) => x.id), [goodEnough]);
+  const SECTION_META = SECTION_BY_ID;
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -83,7 +62,8 @@ export default function Log({
     const completedSet = new Set(completedSections);
     const next = SECTION_ORDER.find((s) => !completedSet.has(s));
     return next || SECTION_ORDER[0];
-  }, [location.state, completedSections]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
 
   const [activeSection, setActiveSection] = useState(initialSection);
   const [celebration, setCelebration] = useState(null);
@@ -93,8 +73,8 @@ export default function Log({
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, [activeSection]);
 
-  const currentIndex = SECTION_ORDER.indexOf(activeSection);
-  const meta = SECTION_META[activeSection];
+  const currentIndex = Math.max(0, SECTION_ORDER.indexOf(activeSection));
+  const meta = SECTION_META[activeSection] || SECTION_META[SECTION_ORDER[0]];
   const completedSet = useMemo(() => new Set(completedSections), [completedSections]);
 
   // --- Handlers ---
@@ -121,7 +101,7 @@ export default function Log({
     } else {
       navigate("/");
     }
-  }, [currentIndex, navigate]);
+  }, [currentIndex, navigate, SECTION_ORDER]);
 
   const handleSkip = useCallback(() => {
     playTap();
@@ -145,29 +125,16 @@ export default function Log({
     };
 
     switch (activeSection) {
-      case "sleep":
-        return (
-          <SleepSection
-            {...sectionProps}
-            yesterdayData={yesterdayLog?.sleep || null}
-          />
-        );
       case "checkins":
-        return <CheckInSection {...sectionProps} />;
-      case "mood":
-        return <MoodSection {...sectionProps} />;
-      case "symptoms":
-        return <SymptomsSection {...sectionProps} />;
+        return <CheckInSection {...sectionProps} profile={profile} />;
       case "pots":
         return <POTSSection {...sectionProps} />;
       case "eds":
         return <EDSSection {...sectionProps} />;
-      case "nutrition":
-        return <NutritionSection {...sectionProps} />;
-      case "habits":
-        return <HabitsSchoolSection {...sectionProps} />;
       default:
-        return null;
+        return meta.questions ? (
+          <QuestionSection key={activeSection} section={meta} {...sectionProps} profile={profile} onSafety={onSafety} />
+        ) : null;
     }
   };
 

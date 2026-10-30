@@ -7,30 +7,25 @@ import useAuth from "./hooks/useAuth";
 import useLog from "./hooks/useLog";
 import useLogs from "./hooks/useLogs";
 import { dateKey, saveLog } from "./firebase";
+import useProfile from "./profile";
+import SafetySupport from "./components/SafetySupport";
 
 const Home = lazy(() => import("./pages/Home"));
 const Log = lazy(() => import("./pages/Log"));
 const Summary = lazy(() => import("./pages/Summary"));
 const History = lazy(() => import("./pages/History"));
 const Export = lazy(() => import("./pages/Export"));
+const PastLog = lazy(() => import("./pages/PastLog"));
 const Login = lazy(() => import("./pages/Login"));
+const Settings = lazy(() => import("./pages/Settings"));
+const Screeners = lazy(() => import("./pages/Screeners"));
 
-/** Get the first and last day of the current month as YYYY-MM-DD strings. */
-function getMonthRange() {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = now.getMonth();
-  const first = `${y}-${String(m + 1).padStart(2, "0")}-01`;
-  const lastDay = new Date(y, m + 1, 0).getDate();
-  const last = `${y}-${String(m + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+/** Get the first and last day of a month as YYYY-MM-DD strings. */
+function getMonthRange(year, month) {
+  const first = `${year}-${String(month + 1).padStart(2, "0")}-01`;
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  const last = `${year}-${String(month + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
   return { first, last };
-}
-
-/** Get yesterday's date key. */
-function yesterdayKey() {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return dateKey(d);
 }
 
 export default function App() {
@@ -52,16 +47,34 @@ export default function App() {
     completedSections,
   } = useLog(user?.uid, today);
 
-  // Yesterday's log (for "same as yesterday" feature)
-  const { log: yesterdayLog } = useLog(user?.uid, yesterdayKey());
+  // Profile (meds, cycle tracking, support contact)
+  const { profile, updateProfile } = useProfile(user?.uid);
+
+  // Safety support screen
+  const [showSupport, setShowSupport] = useState(false);
+  const handleSafety = useCallback(() => setShowSupport(true), []);
 
   // Month logs (for Summary, History, Export pages)
-  const { first, last } = useMemo(() => getMonthRange(), []);
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() };
+  });
+  const { year, month } = selectedMonth;
+  const { first, last } = useMemo(() => getMonthRange(year, month), [year, month]);
   const {
     logs: monthLogs,
     loading: monthLoading,
     refetch: refetchMonthLogs,
   } = useLogs(user?.uid, first, last);
+
+  const handleMonthChange = useCallback((offset) => {
+    setSelectedMonth((current) => {
+      const next = new Date(current.year, current.month + offset, 1);
+      const now = new Date();
+      if (next > new Date(now.getFullYear(), now.getMonth(), 1)) return current;
+      return { year: next.getFullYear(), month: next.getMonth() };
+    });
+  }, []);
 
   // Good Enough Mode — persisted in localStorage
   const [goodEnough, setGoodEnough] = useState(() => {
@@ -150,6 +163,7 @@ export default function App() {
                 goodEnough={goodEnough}
                 onGoodEnoughToggle={handleGoodEnoughToggle}
                 onLogout={logout}
+                profile={profile}
               />
             }
           />
@@ -162,9 +176,14 @@ export default function App() {
                 goodEnough={goodEnough}
                 onUpdateField={updateField}
                 onSaveSection={handleSaveSection}
-                yesterdayLog={yesterdayLog}
+                profile={profile}
+                onSafety={handleSafety}
               />
             }
+          />
+          <Route
+            path="/log/:date"
+            element={<PastLog user={user} onSaved={refetchMonthLogs} />}
           />
           <Route
             path="/summary"
@@ -172,6 +191,10 @@ export default function App() {
               <Summary
                 logs={monthLogs}
                 loading={monthLoading}
+                year={year}
+                month={month}
+                onMonthChange={handleMonthChange}
+                profile={profile}
               />
             }
           />
@@ -181,6 +204,9 @@ export default function App() {
               <History
                 logs={monthLogs}
                 loading={monthLoading}
+                year={year}
+                month={month}
+                onMonthChange={handleMonthChange}
               />
             }
           />
@@ -191,12 +217,28 @@ export default function App() {
                 logs={monthLogs}
                 loading={monthLoading}
                 onRestore={handleRestore}
+                year={year}
+                month={month}
+                user={user}
+                profile={profile}
+              />
+            }
+          />
+          <Route path="/settings" element={<Settings profile={profile} onUpdate={updateProfile} />} />
+          <Route
+            path="/screeners"
+            element={
+              <Screeners
+                user={user}
+                onSafety={handleSafety}
+                onDone={async (day) => { await updateProfile({ lastScreener: day }); refetchMonthLogs(); }}
               />
             }
           />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>
+      {showSupport && <SafetySupport contact={profile.trustedContact} onClose={() => setShowSupport(false)} />}
     </BrowserRouter>
   );
 }

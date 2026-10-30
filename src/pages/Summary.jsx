@@ -2,8 +2,12 @@
 // Summary page: week selector, stat cards, mood timeline, best/hardest day,
 // flare calendar, emotion cloud, patterns, doctor export
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo } from "react";
 import BottomNav from "../components/BottomNav";
+import MonthSwitcher from "../components/MonthSwitcher";
+import { useNavigate } from "react-router-dom";
+import { normalizeDay, checkinList } from "../analysis/normalize";
+import { findPatterns, sentence, MIN_N } from "../analysis/patterns";
 
 const playTap = () => {
   try {
@@ -24,8 +28,6 @@ const playTap = () => {
 };
 
 const MOOD_EMOJIS = ["😢", "😕", "😐", "🙂", "😊"];
-const PAIN_EMOJIS = ["😌", "🤏", "😐", "😣", "😫"];
-const ENERGY_EMOJIS = ["🪫", "😮‍💨", "😐", "⚡", "🔋"];
 
 /** Get average of an array of numbers, ignoring nulls */
 function avg(arr) {
@@ -44,16 +46,19 @@ function fmt(n) {
  * Summary
  *
  * Props:
- *   logs       — array of log objects for the current month
+ *   logs       — array of log objects for the selected month
  *   loading    — boolean
+ *   year, month — selected month
+ *   onMonthChange — change selected month by -1 or +1
  */
-export default function Summary({ logs = [], loading = false }) {
+export default function Summary({ logs = [], loading = false, year, month, onMonthChange, profile }) {
+  const navigate = useNavigate();
   const [selectedWeek, setSelectedWeek] = useState(0); // 0=week1, 1=week2, 2=week3, 3=week4, 4=all
 
   const now = useMemo(() => new Date(), []);
-  const currentDay = now.getDate();
-  const totalDays = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  const monthName = now.toLocaleString("default", { month: "long", year: "numeric" });
+  const totalDays = new Date(year, month + 1, 0).getDate();
+  const isCurrentMonth = year === now.getFullYear() && month === now.getMonth();
+  const currentDay = isCurrentMonth ? now.getDate() : totalDays;
 
   // Build a map: dayOfMonth -> log
   const logMap = useMemo(() => {
@@ -89,37 +94,11 @@ export default function Summary({ logs = [], loading = false }) {
 
   // --- Compute stats ---
 
-  // Extract mood/pain/energy from check-ins or mood section
-  const moodValues = useMemo(() =>
-    weekLogs.map((l) => {
-      if (l.mood?.overallMood != null) return l.mood.overallMood;
-      const cis = l.checkins?.checkins || l.checkins || [];
-      if (Array.isArray(cis) && cis.length > 0) {
-        const last = cis[cis.length - 1];
-        return last.mood ?? null;
-      }
-      return null;
-    }), [weekLogs]);
-
-  const painValues = useMemo(() =>
-    weekLogs.map((l) => {
-      const cis = l.checkins?.checkins || l.checkins || [];
-      if (Array.isArray(cis) && cis.length > 0) {
-        const last = cis[cis.length - 1];
-        return last.pain ?? null;
-      }
-      return null;
-    }), [weekLogs]);
-
-  const energyValues = useMemo(() =>
-    weekLogs.map((l) => {
-      const cis = l.checkins?.checkins || l.checkins || [];
-      if (Array.isArray(cis) && cis.length > 0) {
-        const last = cis[cis.length - 1];
-        return last.energy ?? null;
-      }
-      return null;
-    }), [weekLogs]);
+  // Daily values from the shared normalizer (handles old and new answers)
+  const normWeek = useMemo(() => weekLogs.map(normalizeDay), [weekLogs]);
+  const moodValues = useMemo(() => normWeek.map((d) => d.mood), [normWeek]);
+  const painValues = useMemo(() => normWeek.map((d) => d.painStop), [normWeek]);
+  const energyValues = useMemo(() => normWeek.map((d) => d.activation), [normWeek]);
 
   const flareDays = useMemo(() =>
     weekLogs.filter((l) => l.eds?.flareDay === true).length,
@@ -161,81 +140,17 @@ export default function Summary({ logs = [], loading = false }) {
   const emotionCounts = useMemo(() => {
     const counts = {};
     logs.forEach((l) => {
-      const emotion = l.mood?.emotion;
-      if (emotion) {
+      const emotions = [l.mood?.emotion, ...checkinList(l).map((c) => c.emotion)].filter(Boolean);
+      emotions.forEach((emotion) => {
         counts[emotion] = (counts[emotion] || 0) + 1;
-      }
+      });
     });
     return Object.entries(counts)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 10);
   }, [logs]);
 
-  // --- Doctor export ---
-  const generateExportText = useCallback(() => {
-    const lines = [
-      `ROOTED Health Summary — ${monthName}`,
-      `Generated: ${now.toLocaleDateString()}`,
-      "",
-      `Days logged: ${logs.length} / ${totalDays}`,
-      `Average Mood: ${fmt(avg(logs.map((l) => l.mood?.overallMood).filter(Boolean)))} / 4`,
-      `Flare days: ${logs.filter((l) => l.eds?.flareDay).length}`,
-      "",
-      "--- Daily Breakdown ---",
-    ];
 
-    logs.forEach((l) => {
-      const cis = l.checkins?.checkins || l.checkins || [];
-      const lastCi = Array.isArray(cis) && cis.length > 0 ? cis[cis.length - 1] : {};
-      lines.push("");
-      lines.push(`Date: ${l.date}`);
-      if (l.mood?.overallMood != null) lines.push(`  Mood: ${MOOD_EMOJIS[l.mood.overallMood]} (${l.mood.overallMood}/4)`);
-      if (l.mood?.emotion) lines.push(`  Emotion: ${l.mood.emotionPath || l.mood.emotion}`);
-      if (lastCi.pain != null) lines.push(`  Pain: ${PAIN_EMOJIS[lastCi.pain]} (${lastCi.pain}/4)`);
-      if (lastCi.energy != null) lines.push(`  Energy: ${ENERGY_EMOJIS[lastCi.energy]} (${lastCi.energy}/4)`);
-      if (l.eds?.flareDay) lines.push("  ⚠️ FLARE DAY");
-      if (l.eds?.activityTolerance) lines.push(`  Activity: ${l.eds.activityTolerance}`);
-      if (l.pots?.heartRate) lines.push(`  HR standing: ${l.pots.heartRate} bpm`);
-      if (l.symptoms?.fatigue != null) lines.push(`  Fatigue: ${l.symptoms.fatigue}/4`);
-    });
-
-    return lines.join("\n");
-  }, [logs, monthName, totalDays, now]);
-
-  const handleCopy = useCallback(() => {
-    const text = generateExportText();
-    navigator.clipboard.writeText(text).catch(() => {});
-    playTap();
-  }, [generateExportText]);
-
-  const handleCSV = useCallback(() => {
-    const headers = ["Date", "Mood", "Emotion", "Pain", "Energy", "Fatigue", "Flare", "Activity", "HR Standing"];
-    const rows = logs.map((l) => {
-      const cis = l.checkins?.checkins || l.checkins || [];
-      const lastCi = Array.isArray(cis) && cis.length > 0 ? cis[cis.length - 1] : {};
-      return [
-        l.date || "",
-        l.mood?.overallMood ?? "",
-        l.mood?.emotion || "",
-        lastCi.pain ?? "",
-        lastCi.energy ?? "",
-        l.symptoms?.fatigue ?? "",
-        l.eds?.flareDay ? "YES" : "",
-        l.eds?.activityTolerance || "",
-        l.pots?.heartRate || "",
-      ].join(",");
-    });
-
-    const csv = [headers.join(","), ...rows].join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `rooted-export-${now.toISOString().split("T")[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    playTap();
-  }, [logs, now]);
 
   // --- Render ---
 
@@ -286,8 +201,9 @@ export default function Summary({ logs = [], loading = false }) {
           color: "var(--brown-light, #9A7E7E)",
           margin: 0,
         }}>
-          {monthName} · {logs.length} days logged
+          {logs.length} days logged
         </p>
+        <MonthSwitcher year={year} month={month} onMonthChange={onMonthChange} />
       </header>
 
       <main style={{
@@ -349,15 +265,15 @@ export default function Summary({ logs = [], loading = false }) {
             color="mauve"
           />
           <StatCard
-            label="Avg Pain"
-            value={avgPain != null ? PAIN_EMOJIS[Math.round(avgPain)] : "—"}
-            sub={fmt(avgPain)}
+            label="Pain in the way"
+            value={avgPain != null ? ["None", "", "Slowing", "", "Stopping"][Math.round(avgPain)] || fmt(avgPain) : "—"}
+            sub={avgPain != null ? `${fmt(avgPain)} of 4` : "no data"}
             color="terra"
           />
           <StatCard
-            label="Avg Energy"
-            value={avgEnergy != null ? ENERGY_EMOJIS[Math.round(avgEnergy)] : "—"}
-            sub={fmt(avgEnergy)}
+            label="Activation"
+            value={avgEnergy != null ? ["🛌", "🐢", "🙂", "⚡", "🌪️"][Math.round(avgEnergy)] : "—"}
+            sub={avgEnergy != null ? `${fmt(avgEnergy)} · 2 = normal` : "no data"}
             color="gold"
           />
           <StatCard
@@ -395,8 +311,9 @@ export default function Summary({ logs = [], loading = false }) {
               (_, i) => {
                 const day = activeWeek.start + i;
                 const log = logMap[day];
-                const mood = log?.mood?.overallMood;
-                const isFuture = day > currentDay;
+                const normMood = log ? normalizeDay(log).mood : null;
+                const mood = normMood == null ? undefined : Math.round(normMood);
+                const isFuture = isCurrentMonth && day > currentDay;
 
                 return (
                   <div
@@ -479,8 +396,8 @@ export default function Summary({ logs = [], loading = false }) {
               const log = logMap[day];
               const isFlare = log?.eds?.flareDay === true;
               const isLogged = !!log;
-              const isToday = day === currentDay;
-              const isFuture = day > currentDay;
+              const isToday = isCurrentMonth && day === currentDay;
+              const isFuture = isCurrentMonth && day > currentDay;
 
               return (
                 <div
@@ -570,71 +487,18 @@ export default function Summary({ logs = [], loading = false }) {
         )}
 
         {/* Patterns detected */}
-        <PatternsCard logs={logs} />
+        <PatternsCard logs={logs} profile={profile} />
 
-        {/* Doctor export */}
-        <div style={{
-          background: "var(--white, #FFFDF8)",
-          borderRadius: "20px",
-          border: "1.5px solid var(--tan-light, #EDE3CF)",
-          padding: "16px",
-        }}>
-          <h3 style={{
-            fontFamily: "'Fraunces', serif",
-            fontSize: "16px",
-            fontWeight: 700,
-            color: "var(--brown, #3B2F2F)",
-            margin: "0 0 4px 0",
-          }}>
-            🩺 Doctor Export
-          </h3>
-          <p style={{
-            fontFamily: "'Nunito', sans-serif",
-            fontSize: "13px",
-            color: "var(--brown-light, #9A7E7E)",
-            margin: "0 0 12px 0",
-          }}>
-            Share a plain-text summary or CSV with your doctor
-          </p>
-          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-            <button
-              onClick={handleCopy}
-              style={{
-                fontFamily: "'Nunito', sans-serif",
-                fontSize: "14px",
-                fontWeight: 700,
-                color: "var(--white, #FFFDF8)",
-                background: "var(--teal, #5A9099)",
-                border: "none",
-                borderRadius: "12px",
-                padding: "10px 18px",
-                cursor: "pointer",
-                transition: "all 0.2s ease",
-                WebkitTapHighlightColor: "transparent",
-              }}
-            >
-              📋 Copy Summary
-            </button>
-            <button
-              onClick={handleCSV}
-              style={{
-                fontFamily: "'Nunito', sans-serif",
-                fontSize: "14px",
-                fontWeight: 700,
-                color: "var(--teal, #5A9099)",
-                background: "var(--white, #FFFDF8)",
-                border: "2px solid var(--teal, #5A9099)",
-                borderRadius: "12px",
-                padding: "10px 18px",
-                cursor: "pointer",
-                transition: "all 0.2s ease",
-                WebkitTapHighlightColor: "transparent",
-              }}
-            >
-              📥 Download CSV
-            </button>
-          </div>
-        </div>
+        {/* Doctor report lives on the Export page */}
+        <button
+          onClick={() => { playTap(); navigate("/export"); }}
+          style={{
+            fontFamily: "'Nunito', sans-serif", fontSize: "15px", fontWeight: 700, color: "var(--white)",
+            background: "var(--teal)", border: "none", borderRadius: "14px", padding: "13px 18px", cursor: "pointer",
+          }}
+        >
+          🩺 Make a doctor report →
+        </button>
       </main>
 
       <BottomNav />
@@ -764,158 +628,40 @@ function LegendItem({ color, label }) {
   );
 }
 
-function PatternsCard({ logs }) {
-  const patterns = useMemo(() => {
-    const found = [];
-    if (logs.length < 3) return found;
-
-    // Sleep quality vs mood
-    const sleepMoodPairs = logs
-      .filter((l) => l.sleep?.quality != null && l.mood?.overallMood != null)
-      .map((l) => ({ sleep: l.sleep.quality, mood: l.mood.overallMood }));
-
-    if (sleepMoodPairs.length >= 3) {
-      const goodSleep = sleepMoodPairs.filter((p) => p.sleep >= 3);
-      const badSleep = sleepMoodPairs.filter((p) => p.sleep <= 1);
-      const goodSleepAvgMood = avg(goodSleep.map((p) => p.mood));
-      const badSleepAvgMood = avg(badSleep.map((p) => p.mood));
-
-      if (goodSleepAvgMood != null && badSleepAvgMood != null && goodSleepAvgMood - badSleepAvgMood > 0.8) {
-        found.push({
-          emoji: "😴→😊",
-          text: "Better sleep tends to mean better mood for you",
-        });
-      }
-    }
-
-    // Flare days vs activity
-    const flareLogs = logs.filter((l) => l.eds?.flareDay);
-    if (flareLogs.length >= 2) {
-      const flareWithReduced = flareLogs.filter(
-        (l) => l.eds?.activityTolerance === "veryLimited" || l.eds?.activityTolerance === "bedbound"
-      );
-      if (flareWithReduced.length > flareLogs.length * 0.5) {
-        found.push({
-          emoji: "🔥→🛏️",
-          text: "Flare days often come with very limited activity",
-        });
-      }
-    }
-
-    // Salt intake vs dizziness
-    const saltDizzPairs = logs
-      .filter((l) => l.nutrition?.salt && l.pots?.dizziness != null)
-      .map((l) => ({ salt: l.nutrition.salt, dizzy: l.pots.dizziness }));
-
-    if (saltDizzPairs.length >= 3) {
-      const lowSaltDizzy = saltDizzPairs.filter((p) => p.salt === "low" && p.dizzy === true);
-      if (lowSaltDizzy.length >= 2) {
-        found.push({
-          emoji: "🧂→😵‍💫",
-          text: "Low salt days seem to correlate with dizziness",
-        });
-      }
-    }
-
-    // Anxiety trend
-    const anxietyVals = logs
-      .filter((l) => l.mood?.anxiety != null)
-      .map((l) => l.mood.anxiety);
-    if (anxietyVals.length >= 5) {
-      const recent = anxietyVals.slice(-3);
-      const earlier = anxietyVals.slice(0, -3);
-      const recentAvg = avg(recent);
-      const earlierAvg = avg(earlier);
-      if (recentAvg != null && earlierAvg != null) {
-        if (recentAvg > earlierAvg + 0.5) {
-          found.push({
-            emoji: "📈😰",
-            text: "Anxiety has been trending up recently",
-          });
-        } else if (recentAvg < earlierAvg - 0.5) {
-          found.push({
-            emoji: "📉😌",
-            text: "Anxiety has been trending down — nice!",
-          });
-        }
-      }
-    }
-
-    return found;
-  }, [logs]);
-
-  if (patterns.length === 0) {
-    return (
-      <div style={{
-        background: "var(--white, #FFFDF8)",
-        borderRadius: "20px",
-        border: "1.5px solid var(--tan-light, #EDE3CF)",
-        padding: "16px",
-      }}>
-        <h3 style={{
-          fontFamily: "'Fraunces', serif",
-          fontSize: "16px",
-          fontWeight: 700,
-          color: "var(--brown, #3B2F2F)",
-          margin: "0 0 4px 0",
-        }}>
-          🔍 Patterns
-        </h3>
-        <p style={{
-          fontFamily: "'Nunito', sans-serif",
-          fontSize: "13px",
-          color: "var(--brown-light, #9A7E7E)",
-          margin: 0,
-        }}>
-          Keep logging — patterns will appear after a few more days of data
-        </p>
-      </div>
-    );
-  }
+function PatternsCard({ logs, profile }) {
+  const result = useMemo(
+    () => findPatterns(logs.map(normalizeDay), { cycleTracking: Boolean(profile?.cycleTracking) }),
+    [logs, profile]
+  );
+  const card = {
+    background: "var(--white, #FFFDF8)",
+    borderRadius: "20px",
+    border: "1.5px solid var(--tan-light, #EDE3CF)",
+    padding: "16px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "8px",
+  };
+  const h = { fontFamily: "'Fraunces', serif", fontSize: "16px", fontWeight: 700, color: "var(--brown, #3B2F2F)", margin: 0 };
+  const p = { fontFamily: "'Nunito', sans-serif", fontSize: "13px", color: "var(--brown, #3B2F2F)", margin: 0, lineHeight: 1.5 };
 
   return (
-    <div style={{
-      background: "var(--white, #FFFDF8)",
-      borderRadius: "20px",
-      border: "1.5px solid var(--tan-light, #EDE3CF)",
-      padding: "16px",
-      display: "flex",
-      flexDirection: "column",
-      gap: "10px",
-    }}>
-      <h3 style={{
-        fontFamily: "'Fraunces', serif",
-        fontSize: "16px",
-        fontWeight: 700,
-        color: "var(--brown, #3B2F2F)",
-        margin: 0,
-      }}>
-        🔍 Patterns Detected
-      </h3>
-      {patterns.map((p, i) => (
-        <div
-          key={i}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "10px",
-            padding: "10px 12px",
-            background: "var(--cream, #FAF5EB)",
-            borderRadius: "12px",
-            border: "1px solid var(--tan-light, #EDE3CF)",
-          }}
-        >
-          <span style={{ fontSize: "18px", flexShrink: 0 }}>{p.emoji}</span>
-          <span style={{
-            fontFamily: "'Nunito', sans-serif",
-            fontSize: "13px",
-            fontWeight: 500,
-            color: "var(--brown, #3B2F2F)",
-          }}>
-            {p.text}
-          </span>
-        </div>
-      ))}
+    <div style={card}>
+      <h3 style={h}>🔍 Patterns this month</h3>
+      {result.top.length > 0 ? (
+        result.top.map((r) => (
+          <p key={r.id} style={{ ...p, padding: "8px 10px", background: "var(--cream)", borderRadius: "10px" }}>{sentence(r)}</p>
+        ))
+      ) : (
+        <p style={{ ...p, color: "var(--brown-light)" }}>
+          {result.testedCount
+            ? "Nothing stands out yet. That's useful to know too."
+            : `Keep logging — each comparison needs at least ${MIN_N} days on both sides before it shows up here.`}
+        </p>
+      )}
+      <p style={{ ...p, fontSize: "11px", color: "var(--brown-light)" }}>
+        These are things that happened together, not proof one caused the other.
+      </p>
     </div>
   );
 }

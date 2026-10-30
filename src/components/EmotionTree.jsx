@@ -1,5 +1,6 @@
 // src/components/EmotionTree.jsx — Rooted Health Tracker
 // Self-contained emotion decision tree with breadcrumbs + "close enough" exit
+// Tree content based on the Feelings Wheel (7 core → 2nd tier → 3rd tier)
 
 import { useState, useCallback } from "react";
 
@@ -17,122 +18,323 @@ import { useState, useCallback } from "react";
 // Leaf nodes have no children — auto-confirm on tap.
 const TREE = [
   {
-    label: "Good", emoji: "😊",
+    label: "Happy", emoji: "😊",
     children: [
       {
-        label: "Happy", emoji: "😄",
+        label: "Playful", emoji: "😜",
         children: [
+          { label: "Aroused", emoji: "🌶️" },
+          { label: "Cheeky", emoji: "😏" },
+        ],
+      },
+      {
+        label: "Content", emoji: "☺️",
+        children: [
+          { label: "Free", emoji: "🕊️" },
           { label: "Joyful", emoji: "🥳" },
-          { label: "Grateful", emoji: "🙏" },
-          { label: "Excited", emoji: "🤩" },
-          { label: "Playful", emoji: "😜" },
+        ],
+      },
+      {
+        label: "Interested", emoji: "👀",
+        children: [
+          { label: "Curious", emoji: "🤔" },
+          { label: "Inquisitive", emoji: "🔍" },
+        ],
+      },
+      {
+        label: "Proud", emoji: "🏆",
+        children: [
+          { label: "Successful", emoji: "🥇" },
+          { label: "Confident", emoji: "💪" },
+        ],
+      },
+      {
+        label: "Accepted", emoji: "🤗",
+        children: [
+          { label: "Respected", emoji: "🎖️" },
+          { label: "Valued", emoji: "💎" },
+        ],
+      },
+      {
+        label: "Powerful", emoji: "⚡",
+        children: [
+          { label: "Courageous", emoji: "🦁" },
+          { label: "Creative", emoji: "🎨" },
         ],
       },
       {
         label: "Peaceful", emoji: "😌",
         children: [
-          { label: "Calm", emoji: "🧘" },
-          { label: "Content", emoji: "☺️" },
-          { label: "Relieved", emoji: "😮‍💨" },
-          { label: "Safe", emoji: "🤗" },
+          { label: "Loving", emoji: "🥰" },
+          { label: "Thankful", emoji: "🙏" },
         ],
       },
       {
-        label: "Confident", emoji: "💪",
+        label: "Trusting", emoji: "🤝",
         children: [
-          { label: "Proud", emoji: "🏆" },
-          { label: "Brave", emoji: "🦁" },
-          { label: "Capable", emoji: "⭐" },
-          { label: "Focused", emoji: "🎯" },
+          { label: "Sensitive", emoji: "🌸" },
+          { label: "Intimate", emoji: "💞" },
         ],
       },
       {
-        label: "Loving", emoji: "🥰",
+        label: "Optimistic", emoji: "🌤️",
         children: [
-          { label: "Affectionate", emoji: "💕" },
-          { label: "Connected", emoji: "🤝" },
-          { label: "Warm", emoji: "☀️" },
-          { label: "Appreciated", emoji: "💛" },
+          { label: "Hopeful", emoji: "🌱" },
+          { label: "Inspired", emoji: "✨" },
         ],
       },
     ],
   },
   {
-    label: "Bad", emoji: "😞",
+    label: "Surprised", emoji: "😲",
     children: [
       {
-        label: "Sad", emoji: "😢",
+        label: "Startled", emoji: "🫨",
         children: [
-          { label: "Lonely", emoji: "🥺" },
-          { label: "Hopeless", emoji: "😔" },
-          { label: "Grieving", emoji: "💔" },
+          { label: "Shocked", emoji: "😵" },
+          { label: "Dismayed", emoji: "😦" },
+        ],
+      },
+      {
+        label: "Confused", emoji: "😕",
+        children: [
+          { label: "Disillusioned", emoji: "💭" },
+          { label: "Perplexed", emoji: "❓" },
+        ],
+      },
+      {
+        label: "Amazed", emoji: "🤩",
+        children: [
+          { label: "Astonished", emoji: "😮" },
+          { label: "Awe", emoji: "🌌" },
+        ],
+      },
+      {
+        label: "Excited", emoji: "🎉",
+        children: [
+          { label: "Eager", emoji: "🙋" },
+          { label: "Energetic", emoji: "🚀" },
+        ],
+      },
+    ],
+  },
+  {
+    label: "Bad", emoji: "😩",
+    children: [
+      {
+        label: "Bored", emoji: "🥱",
+        children: [
+          { label: "Indifferent", emoji: "🤷" },
+          { label: "Apathetic", emoji: "😑" },
+        ],
+      },
+      {
+        label: "Busy", emoji: "🏃",
+        children: [
+          { label: "Pressured", emoji: "🗜️" },
+          { label: "Rushed", emoji: "⏱️" },
+        ],
+      },
+      {
+        label: "Stressed", emoji: "😫",
+        children: [
+          { label: "Overwhelmed", emoji: "🤯" },
+          { label: "Out of control", emoji: "🌪️" },
+        ],
+      },
+      {
+        label: "Tired", emoji: "😴",
+        children: [
+          { label: "Sleepy", emoji: "💤" },
+          { label: "Unfocused", emoji: "🌫️" },
+        ],
+      },
+    ],
+  },
+  {
+    label: "Fearful", emoji: "😨",
+    children: [
+      {
+        label: "Scared", emoji: "😰",
+        children: [
+          { label: "Helpless", emoji: "🆘" },
+          { label: "Frightened", emoji: "👻" },
+        ],
+      },
+      {
+        label: "Anxious", emoji: "😟",
+        children: [
+          { label: "Overwhelmed", emoji: "🌊" },
+          { label: "Worried", emoji: "😥" },
+        ],
+      },
+      {
+        label: "Insecure", emoji: "😓",
+        children: [
+          { label: "Inadequate", emoji: "📉" },
+          { label: "Inferior", emoji: "🐜" },
+        ],
+      },
+      {
+        label: "Weak", emoji: "🥀",
+        children: [
+          { label: "Worthless", emoji: "🕳️" },
+          { label: "Insignificant", emoji: "🫥" },
+        ],
+      },
+      {
+        label: "Rejected", emoji: "🚫",
+        children: [
+          { label: "Excluded", emoji: "🚪" },
+          { label: "Persecuted", emoji: "🎯" },
+        ],
+      },
+      {
+        label: "Threatened", emoji: "⚠️",
+        children: [
+          { label: "Nervous", emoji: "😬" },
+          { label: "Exposed", emoji: "🫣" },
+        ],
+      },
+    ],
+  },
+  {
+    label: "Angry", emoji: "😠",
+    children: [
+      {
+        label: "Let down", emoji: "😔",
+        children: [
+          { label: "Betrayed", emoji: "🗡️" },
+          { label: "Resentful", emoji: "😒" },
+        ],
+      },
+      {
+        label: "Humiliated", emoji: "😖",
+        children: [
+          { label: "Disrespected", emoji: "👎" },
+          { label: "Ridiculed", emoji: "🤡" },
+        ],
+      },
+      {
+        label: "Bitter", emoji: "🍋",
+        children: [
+          { label: "Indignant", emoji: "☝️" },
+          { label: "Violated", emoji: "💢" },
+        ],
+      },
+      {
+        label: "Mad", emoji: "😡",
+        children: [
+          { label: "Furious", emoji: "🤬" },
+          { label: "Jealous", emoji: "💚" },
+        ],
+      },
+      {
+        label: "Aggressive", emoji: "👊",
+        children: [
+          { label: "Provoked", emoji: "🐝" },
+          { label: "Hostile", emoji: "⚔️" },
+        ],
+      },
+      {
+        label: "Frustrated", emoji: "😤",
+        children: [
+          { label: "Infuriated", emoji: "🌋" },
+          { label: "Annoyed", emoji: "🙄" },
+        ],
+      },
+      {
+        label: "Distant", emoji: "🧊",
+        children: [
+          { label: "Withdrawn", emoji: "🐢" },
+          { label: "Numb", emoji: "😶" },
+        ],
+      },
+      {
+        label: "Critical", emoji: "🧐",
+        children: [
+          { label: "Skeptical", emoji: "🤨" },
+          { label: "Dismissive", emoji: "💁" },
+        ],
+      },
+    ],
+  },
+  {
+    label: "Disgusted", emoji: "🤢",
+    children: [
+      {
+        label: "Disapproving", emoji: "🙅",
+        children: [
+          { label: "Judgmental", emoji: "⚖️" },
+          { label: "Embarrassed", emoji: "😳" },
+        ],
+      },
+      {
+        label: "Disappointed", emoji: "😞",
+        children: [
+          { label: "Appalled", emoji: "😧" },
+          { label: "Revolted", emoji: "🤮" },
+        ],
+      },
+      {
+        label: "Awful", emoji: "😣",
+        children: [
+          { label: "Nauseated", emoji: "🥴" },
+          { label: "Detestable", emoji: "👿" },
+        ],
+      },
+      {
+        label: "Repelled", emoji: "🚷",
+        children: [
+          { label: "Horrified", emoji: "😱" },
+          { label: "Hesitant", emoji: "🫤" },
+        ],
+      },
+    ],
+  },
+  {
+    label: "Sad", emoji: "😢",
+    children: [
+      {
+        label: "Hurt", emoji: "🤕",
+        children: [
+          { label: "Embarrassed", emoji: "😳" },
+          { label: "Disappointed", emoji: "😞" },
+        ],
+      },
+      {
+        label: "Depressed", emoji: "😔",
+        children: [
+          { label: "Inferior", emoji: "🐜" },
           { label: "Empty", emoji: "🫥" },
         ],
       },
       {
-        label: "Angry", emoji: "😠",
+        label: "Guilty", emoji: "🙇",
         children: [
-          { label: "Frustrated", emoji: "😤" },
-          { label: "Resentful", emoji: "😒" },
-          { label: "Irritable", emoji: "🙄" },
-          { label: "Rageful", emoji: "🤬" },
+          { label: "Remorseful", emoji: "😞" },
+          { label: "Ashamed", emoji: "🙈" },
         ],
       },
       {
-        label: "Scared", emoji: "😰",
+        label: "Despair", emoji: "😩",
         children: [
-          { label: "Anxious", emoji: "😟",
-            children: [
-              { label: "Spiraling", emoji: "🌀" },
-              { label: "Overthinking", emoji: "🧠" },
-              { label: "Restless", emoji: "😣" },
-              { label: "On edge", emoji: "⚡" },
-            ],
-          },
-          { label: "Panicked", emoji: "😱" },
-          { label: "Vulnerable", emoji: "🫣" },
-          { label: "Insecure", emoji: "😓" },
+          { label: "Powerless", emoji: "🪫" },
+          { label: "Grief", emoji: "💔" },
         ],
       },
       {
-        label: "Overwhelmed", emoji: "🤯",
+        label: "Vulnerable", emoji: "🫣",
         children: [
-          { label: "Burned out", emoji: "🔥" },
-          { label: "Paralyzed", emoji: "🧊" },
-          { label: "Overstimulated", emoji: "📡" },
-          { label: "Drowning", emoji: "🌊" },
-        ],
-      },
-    ],
-  },
-  {
-    label: "Meh", emoji: "😐",
-    children: [
-      {
-        label: "Numb", emoji: "😶",
-        children: [
-          { label: "Flat", emoji: "➖" },
-          { label: "Dissociated", emoji: "🫠" },
-          { label: "Shut down", emoji: "🔇" },
-          { label: "Frozen", emoji: "🥶" },
+          { label: "Fragile", emoji: "🥚" },
+          { label: "Victimized", emoji: "🎯" },
         ],
       },
       {
-        label: "Disconnected", emoji: "🫥",
+        label: "Lonely", emoji: "🥺",
         children: [
-          { label: "Spaced out", emoji: "💫" },
-          { label: "Brain fog", emoji: "🌫️" },
-          { label: "Autopilot", emoji: "🤖" },
-          { label: "Detached", emoji: "🎈" },
-        ],
-      },
-      {
-        label: "Blah", emoji: "😑",
-        children: [
-          { label: "Bored", emoji: "🥱" },
-          { label: "Unmotivated", emoji: "🐌" },
-          { label: "Muted", emoji: "🔈" },
-          { label: "Just existing", emoji: "🧍" },
+          { label: "Abandoned", emoji: "🏚️" },
+          { label: "Isolated", emoji: "🏝️" },
         ],
       },
     ],
@@ -169,7 +371,7 @@ function getNodesAtPath(path) {
 }
 
 export default function EmotionTree({ onSelect, colorClass = "mauve" }) {
-  // path = array of labels chosen so far, e.g. ["Bad", "Scared", "Anxious"]
+  // path = array of labels chosen so far, e.g. ["Fearful", "Anxious"]
   const [path, setPath] = useState([]);
 
   const currentNodes = path.length === 0 ? TREE : getNodesAtPath(path);
